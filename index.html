@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Quản Lý Thiết Bị</title>
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css"
+    />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <!-- Login Page -->
+    <div class="login-container" id="loginPage">
+      <div class="login-form">
+        <h1>ĐĂNG NHẬP</h1>
+        <div class="form-group">
+          <label for="username">Tài khoản</label>
+          <input type="text" id="username" placeholder="Nhập tài khoản" />
+        </div>
+        <div class="form-group">
+          <label for="password">Mật khẩu</label>
+          <input type="password" id="password" placeholder="Nhập mật khẩu" />
+        </div>
+        <button class="login-btn" id="loginBtn">Đăng nhập</button>
+      </div>
+    </div>
+
+    <!-- Main Application -->
+    <div class="app-container" id="appContainer">
+      <header class="header">
+        <h1>Quản Lý Thiết Bị</h1>
+        <div class="user-menu">
+          <img
+            src="https://ui-avatars.com/api/?name=Admin&background=3498db&color=fff"
+            alt="User Avatar"
+          />
+          <button class="logout-btn" id="logoutBtn">
+            <i class="fas fa-sign-out-alt"></i>
+            Đăng xuất
+          </button>
+        </div>
+      </header>
+
+      <div class="main-content">
+        <aside class="sidebar">
+          <ul class="sidebar-menu">
+            <li>
+              <a href="#" class="active" data-section="overview">
+                <i class="fas fa-tachometer-alt"></i>
+                Tổng Quan
+              </a>
+            </li>
+            <li>
+              <a href="#" data-section="devices">
+                <i class="fas fa-laptop"></i>
+                Danh sách thiết bị
+              </a>
+            </li>
+            <li>
+              <a href="#" data-section="users">
+                <i class="fas fa-users"></i>
+                Danh sách người sử dụng
+              </a>
+            </li>
+            <li>
+              <a href="#" data-section="chart">
+                <i class="fas fa-chart-bar"></i>
+                Biểu đồ thống kê
+              </a>
+            </li>
+          </ul>
+        </aside>
+
+        <main class="content-area">
+          <!-- Overview Section -->
+          <section class="content-section" id="overviewSection">
+            <h2 class="section-title">Tổng Quan</h2>
+            <p class="section-description">
+              Thống kê tổng quan về hệ thống thiết bị
+            </p>
+
+            <div class="dashboard-cards">
+              <div class="card">
+                <div class="card-header">
+                  <h3 class="card-title">Tổng số thiết bị</h3>
+                  <div class="card-icon devices">
+                    <i class="fas fa-laptop"></i>
+                  </div>
+                </div>
+                <div class="card-value" id="totalDevices">0</div>
+                <div class="card-footer" id="newDevicesText">Đang tải...</div>
+              </div>
+
+              <div class="card">
+                <div class="card-header">
+                  <h3 class="card-title">Đang sử dụng</h3>
+                  <div class="card-icon users">
+                    <i class="fas fa-user-check"></i>
+                  </div>
+                </div>
+                <div class="card-value" id="activeDevices">0</div>
+                <div class="card-footer" id="activePercent">Đang tải...</div>
+              </div>
+
+              <div class="card">
+                <div class="card-header">
+                  <h3 class="card-title">Bảo Hành</h3>
+                  <div class="card-icon maintenance">
+                    <i class="fas fa-tools"></i>
+                  </div>
+                </div>
+                <div class="card-value" id="maintenanceDevices">0</div>
+                <div class="card-footer" id="maintenancePercent">
+                  Đang tải...
+                </div>
+              </div>
+
+              <div class="card">
+                <div class="card-header">
+                  <h3 class="card-title">Sẵn sàng cấp phát</h3>
+                  <div class="card-icon available">
+                    <i class="fas fa-box-open"></i>
+                  </div>
+                </div>
+                <div class="card-value" id="availableDevices">0</div>
+                <div class="card-footer" id="availablePercent">Đang tải...</div>
+              </div>
+            </div>
+
+            <div class="chart-container">
+              <h3 class="chart-title">Thống kê thiết bị theo tháng</h3>
+              <div class="chart-wrapper">
+                <canvas id="monthlyChart"></canvas>
+              </div>
+            </div>
+          </section>
+
+          <!-- Devices Section -->
+          <section
+            class="content-section"
+            id="devicesSection"
+            style="display: none"
+          >
+            <div class="table-container">
+              <div class="table-header">
+                <h3 class="table-title">Danh sách thiết bị</h3>
+                <div class="table-actions">
+                  <button class="btn btn-primary" id="addDeviceBtn">
+                    <i class="fas fa-plus"></i> Thêm thiết bị
+                  </button>
+                </div>
+              </div>
+              <table id="devicesTable">
+                <thead>
+                  <tr>
+                    <th>Mã thiết bị</th>
+                    <th>Tên thiết bị</th>
+                    <th>Loại thiết bị</th>
+                    <th>Serial</th>
+                    <th>Ngày nhập</th>
+                    <th>Trạng thái</th>
+                    <th>Người sử dụng</th>
+                    <th>Thao tác</th>
+                  </tr>
+                </thead>
+                <tbody id="devicesTableBody">
+                  <!-- Devices will be loaded here -->
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <!-- Users Section -->
+          <section
+            class="content-section"
+            id="usersSection"
+            style="display: none"
+          >
+            <div class="table-container">
+              <div class="table-header">
+                <h3 class="table-title">Danh sách người sử dụng</h3>
+                <div class="table-actions">
+                  <button class="btn btn-primary" id="addUserBtn">
+                    <i class="fas fa-plus"></i> Thêm người dùng
+                  </button>
+                </div>
+              </div>
+              <table id="usersTable">
+                <thead>
+                  <tr>
+                    <th>Mã NV</th>
+                    <th>Họ và tên</th>
+                    <th>Phòng ban</th>
+                    <th>Thiết bị sử dụng</th>
+                    <th>Ngày cấp</th>
+                    <th>Trạng thái</th>
+                    <th>Thao tác</th>
+                  </tr>
+                </thead>
+                <tbody id="usersTableBody">
+                  <!-- Users will be loaded here -->
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <!-- Chart Section -->
+          <section
+            class="content-section"
+            id="chartSection"
+            style="display: none"
+          >
+            <h2 class="section-title">Biểu đồ thống kê</h2>
+            <p class="section-description">Thống kê thiết bị theo năm</p>
+
+            <div class="chart-container">
+              <h3 class="chart-title">
+                Tình hình thiết bị năm <span id="currentYear"></span>
+              </h3>
+              <div class="chart-wrapper">
+                <canvas id="yearlyChart"></canvas>
+              </div>
+            </div>
+
+            <div class="dashboard-cards">
+              <div class="card">
+                <div class="card-header">
+                  <h3 class="card-title">Tổng mua mới</h3>
+                  <div class="card-icon devices">
+                    <i class="fas fa-shopping-cart"></i>
+                  </div>
+                </div>
+                <div class="card-value" id="yearlyPurchased">0</div>
+                <div class="card-footer">
+                  thiết bị trong năm <span id="currentYear2"></span>
+                </div>
+              </div>
+
+              <div class="card">
+                <div class="card-header">
+                  <h3 class="card-title">Đang sử dụng</h3>
+                  <div class="card-icon users">
+                    <i class="fas fa-user-check"></i>
+                  </div>
+                </div>
+                <div class="card-value" id="yearlyActive">0</div>
+                <div class="card-footer" id="yearlyActivePercent">
+                  0% tổng mua mới
+                </div>
+              </div>
+
+              <div class="card">
+                <div class="card-header">
+                  <h3 class="card-title">Bảo Hành</h3>
+                  <div class="card-icon maintenance">
+                    <i class="fas fa-tools"></i>
+                  </div>
+                </div>
+                <div class="card-value" id="yearlyMaintenance">0</div>
+                <div class="card-footer" id="yearlyMaintenancePercent">
+                  0% tổng mua mới
+                </div>
+              </div>
+            </div>
+          </section>
+        </main>
+      </div>
+    </div>
+
+    <!-- Device Modal -->
+    <div class="modal" id="deviceModal">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3 class="modal-title" id="deviceModalTitle">Thêm thiết bị mới</h3>
+          <button class="modal-close" id="closeDeviceModal">&times;</button>
+        </div>
+        <div class="modal-body">
+          <form id="deviceForm">
+            <input type="hidden" id="deviceId" />
+            <div class="form-row">
+              <label for="deviceCode">Mã thiết bị</label>
+              <input type="text" id="deviceCode" required />
+            </div>
+            <div class="form-row">
+              <label for="deviceName">Tên thiết bị</label>
+              <input type="text" id="deviceName" required />
+            </div>
+            <div class="form-row">
+              <label for="deviceType">Loại thiết bị</label>
+              <select id="deviceType" required>
+                <option value="">Chọn loại thiết bị</option>
+                <option value="Laptop">Laptop</option>
+                <option value="Máy bàn">Máy bàn</option>
+                <option value="Bàn phím">Bàn phím</option>
+                <option value="Chuột máy tính">Chuột máy tính</option>
+                <option value="Tablet">Tablet</option>
+                <option value="Màn hình">Màn hình</option>
+                <option value="Khác">Khác</option>
+              </select>
+            </div>
+            <div class="form-row">
+              <label for="deviceSerial">Serial Number</label>
+              <input
+                type="text"
+                id="deviceSerial"
+                placeholder="Nhập số serial"
+              />
+            </div>
+            <div class="form-row">
+              <label for="purchaseDate">Ngày nhập</label>
+              <input type="date" id="purchaseDate" required />
+            </div>
+            <div class="form-row">
+              <label for="deviceStatus">Trạng thái</label>
+              <select id="deviceStatus" required>
+                <option value="">Chọn trạng thái</option>
+                <option value="active">Đang sử dụng</option>
+                <option value="maintenance">Bảo Hành</option>
+                <option value="inactive">Sẵn sàng</option>
+              </select>
+            </div>
+            <div class="form-row">
+              <label for="deviceUser">Người sử dụng (nếu có)</label>
+              <select id="deviceUser">
+                <option value="">Không có</option>
+                <!-- Users will be loaded here -->
+              </select>
+            </div>
+          </form>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-danger" id="cancelDeviceBtn">Hủy</button>
+          <button class="btn btn-success" id="saveDeviceBtn">Lưu</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- User Modal -->
+    <div class="modal" id="userModal">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3 class="modal-title" id="userModalTitle">Thêm người dùng mới</h3>
+          <button class="modal-close" id="closeUserModal">&times;</button>
+        </div>
+        <div class="modal-body">
+          <form id="userForm">
+            <input type="hidden" id="userId" />
+            <div class="form-row">
+              <label for="userCode">Mã nhân viên</label>
+              <input type="text" id="userCode" required />
+            </div>
+            <div class="form-row">
+              <label for="userName">Họ và tên</label>
+              <input type="text" id="userName" required />
+            </div>
+            <div class="form-row">
+              <label for="userDepartment">Phòng ban</label>
+              <select id="userDepartment" required>
+                <option value="">Chọn phòng ban</option>
+                <option value="Kế toán">Kế toán</option>
+                <option value="Nhân sự">Nhân sự</option>
+                <option value="Marketing">Theo đơn</option>
+                <option value="IT">IT</option>
+                <option value="Kinh doanh">Xuất nhập khẩu</option>
+                <option value="Khác">Khác</option>
+              </select>
+            </div>
+            <div class="form-row">
+              <label for="userDevice">Thiết bị sử dụng (nếu có)</label>
+              <select id="userDevice">
+                <option value="">Không có</option>
+                <!-- Available devices will be loaded here -->
+              </select>
+            </div>
+            <div class="form-row">
+              <label for="assignDate">Ngày cấp (nếu có)</label>
+              <input type="date" id="assignDate" />
+            </div>
+          </form>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-danger" id="cancelUserBtn">Hủy</button>
+          <button class="btn btn-success" id="saveUserBtn">Lưu</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Delete Confirmation Modal -->
+    <div class="modal" id="deleteModal">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3 class="modal-title" id="deleteModalTitle">Xác nhận xóa</h3>
+          <button class="modal-close" id="closeDeleteModal">&times;</button>
+        </div>
+        <div class="modal-body">
+          <p id="deleteMessage">Bạn có chắc chắn muốn xóa mục này?</p>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-danger" id="cancelDeleteBtn">Hủy</button>
+          <button class="btn btn-success" id="confirmDeleteBtn">
+            Xác nhận
+          </button>
+        </div>
+      </div>
+    </div>
+    <script src="script.js"></script>
+  </body>
+</html>
