@@ -159,7 +159,7 @@
                     <th>Mã thiết bị</th>
                     <th>Tên thiết bị</th>
                     <th>Loại thiết bị</th>
-                    <th>Serial</th>
+                    <th>Serial(S/N)</th>
                     <th>Ngày nhập</th>
                     <th>Trạng thái</th>
                     <th>Người sử dụng</th>
@@ -302,7 +302,7 @@
               </select>
             </div>
             <div class="form-row">
-              <label for="deviceSerial">Serial Number</label>
+              <label for="deviceSerial">Serial(S/N)</label>
               <input
                 type="text"
                 id="deviceSerial"
@@ -311,7 +311,13 @@
             </div>
             <div class="form-row">
               <label for="purchaseDate">Ngày nhập</label>
-              <input type="date" id="purchaseDate" required />
+              <input
+                type="date"
+                id="purchaseDate"
+                required
+                placeholder="YYYY-MM-DD"
+                pattern="\d{4}-\d{2}-\d{2}"
+              />
             </div>
             <div class="form-row">
               <label for="deviceStatus">Trạng thái</label>
@@ -362,10 +368,11 @@
                 <option value="">Chọn phòng ban</option>
                 <option value="Kế toán">Kế toán</option>
                 <option value="Nhân sự">Nhân sự</option>
-                <option value="Marketing">Theo đơn</option>
+                <option value="Theo đơn">Theo đơn</option>
                 <option value="IT">IT</option>
-                <option value="Kinh doanh">Xuất nhập khẩu</option>
+                <option value="Xuất nhập khẩu">Xuất nhập khẩu</option>
                 <option value="Khác">Khác</option>
+                <option value="Kho">Kho</option>
               </select>
             </div>
             <div class="form-row">

@@ -65,7 +65,23 @@ body {
   border-radius: 4px;
   font-size: 1rem;
 }
+input[type="date"] {
+  font-family: inherit;
+  padding: 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
 
+input[type="date"]::before {
+  content: attr(placeholder);
+  color: #999;
+  margin-right: 0.5em;
+}
+
+input[type="date"]:focus::before,
+input[type="date"]:valid::before {
+  content: "";
+}
 .login-btn {
   width: 100%;
   padding: 0.75rem;
