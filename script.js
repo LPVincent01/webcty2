@@ -254,12 +254,24 @@ function getYearlyStats() {
 }
 // Initialize App
 function initApp() {
+  const dateInputs = document.querySelectorAll('input[type="date"]');
+  dateInputs.forEach((input) => {
+    if (!input.value) input.setAttribute("placeholder", "YYYY-MM-DD");
+    input.addEventListener("change", formatDateInput);
+  });
   loadDevices();
   loadUsers();
   updateStats();
   initCharts();
 }
-
+function formatDateInput() {
+  if (this.value) {
+    const parts = this.value.split("-");
+    if (parts.length === 3) {
+      this.value = `${parts[0]}-${parts[1]}-${parts[2]}`;
+    }
+  }
+}
 // Load Devices
 function loadDevices() {
   devicesTableBody.innerHTML = "";

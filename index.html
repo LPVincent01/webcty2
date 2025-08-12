@@ -315,8 +315,8 @@
                 type="date"
                 id="purchaseDate"
                 required
-                placeholder="YYYY-MM-DD"
                 pattern="\d{4}-\d{2}-\d{2}"
+                placeholder="YYYY-MM-DD"
               />
             </div>
             <div class="form-row">
@@ -384,7 +384,12 @@
             </div>
             <div class="form-row">
               <label for="assignDate">Ngày cấp (nếu có)</label>
-              <input type="date" id="assignDate" />
+              <input
+                type="date"
+                id="assignDate"
+                pattern="\d{4}-\d{2}-\d{2}"
+                placeholder="YYYY-MM-DD"
+              />
             </div>
           </form>
         </div>

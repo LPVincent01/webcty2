@@ -66,16 +66,18 @@ body {
   font-size: 1rem;
 }
 input[type="date"] {
+  position: relative;
   font-family: inherit;
-  padding: 8px;
-  border: 1px solid #ddd;
-  border-radius: 4px;
 }
 
 input[type="date"]::before {
   content: attr(placeholder);
   color: #999;
-  margin-right: 0.5em;
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
 }
 
 input[type="date"]:focus::before,
