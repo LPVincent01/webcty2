@@ -10,6 +10,7 @@
     />
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link rel="stylesheet" href="style.css" />
+    <base href="/" />
   </head>
   <body>
     <!-- Login Page -->
@@ -282,15 +283,15 @@
             <input type="hidden" id="deviceId" />
             <div class="form-row">
               <label for="deviceCode">Mã thiết bị</label>
-              <input type="text" id="deviceCode" required />
+              <input type="text" id="MaThietBi" placeholder="Mã thiết bị" />
             </div>
             <div class="form-row">
               <label for="deviceName">Tên thiết bị</label>
-              <input type="text" id="deviceName" required />
+              <input type="text" id="TenThietBi" placeholder="Tên thiết bị" />
             </div>
             <div class="form-row">
               <label for="deviceType">Loại thiết bị</label>
-              <select id="deviceType" required>
+              <select id="LoaiThietBi">
                 <option value="">Chọn loại thiết bị</option>
                 <option value="Laptop">Laptop</option>
                 <option value="Máy bàn">Máy bàn</option>
@@ -303,34 +304,24 @@
             </div>
             <div class="form-row">
               <label for="deviceSerial">Serial(S/N)</label>
-              <input
-                type="text"
-                id="deviceSerial"
-                placeholder="Nhập số serial"
-              />
+              <input type="text" id="SerialSN" placeholder="Serial" />
             </div>
             <div class="form-row">
               <label for="purchaseDate">Ngày nhập</label>
-              <input
-                type="date"
-                id="purchaseDate"
-                required
-                pattern="\d{4}-\d{2}-\d{2}"
-                placeholder="YYYY-MM-DD"
-              />
+              <input type="date" id="NgayNhap" />
             </div>
             <div class="form-row">
               <label for="deviceStatus">Trạng thái</label>
-              <select id="deviceStatus" required>
+              <select id="Trangthai">
                 <option value="">Chọn trạng thái</option>
-                <option value="active">Đang sử dụng</option>
-                <option value="maintenance">Bảo Hành</option>
-                <option value="inactive">Sẵn sàng</option>
+                <option value="Đang sử dụng">Đang sử dụng</option>
+                <option value="Bảo Hành">Bảo Hành</option>
+                <option value="Sẵn sàng">Sẵn sàng</option>
               </select>
             </div>
             <div class="form-row">
               <label for="deviceUser">Người sử dụng (nếu có)</label>
-              <select id="deviceUser">
+              <select id="Nguoisudung">
                 <option value="">Không có</option>
                 <!-- Users will be loaded here -->
               </select>

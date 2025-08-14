@@ -6,7 +6,7 @@ let devices = [
     type: "Laptop",
     serial: "20250801",
     purchaseDate: "2023-03-15",
-    status: "active",
+    status: "Đang sử dụng",
     userId: 1,
   },
   {
@@ -16,7 +16,7 @@ let devices = [
     type: "Laptop",
     serial: "20250802",
     purchaseDate: "2023-03-20",
-    status: "active",
+    status: "Đang sử dụng",
     userId: 2,
   },
   {
@@ -26,7 +26,7 @@ let devices = [
     type: "Máy bàn",
     serial: "20250803",
     purchaseDate: "2023-04-05",
-    status: "maintenance",
+    status: "Bảo Hành",
     userId: null,
   },
   {
@@ -36,7 +36,7 @@ let devices = [
     type: "Tablet",
     serial: "20250804",
     purchaseDate: "2023-04-10",
-    status: "active",
+    status: "Đang sử dụng",
     userId: 3,
   },
   {
@@ -46,7 +46,7 @@ let devices = [
     type: "Màn hình",
     serial: "20250805",
     purchaseDate: "2023-04-15",
-    status: "inactive",
+    status: "Sẵn sàng",
     userId: null,
   },
 ];
@@ -205,9 +205,9 @@ function getMonthlyStats() {
       if (month >= 0 && month < 6) {
         purchased[month]++;
 
-        if (device.status === "active") {
+        if (device.status === "Đang sử dụng") {
           active[month]++;
-        } else if (device.status === "maintenance") {
+        } else if (device.status === "Bảo Hành") {
           maintenance[month]++;
         }
       }
@@ -237,9 +237,9 @@ function getYearlyStats() {
     if (yearIndex !== -1) {
       purchased[yearIndex]++;
 
-      if (device.status === "active") {
+      if (device.status === "Đang sử dụng") {
         active[yearIndex]++;
-      } else if (device.status === "maintenance") {
+      } else if (device.status === "Bảo Hành") {
         maintenance[yearIndex]++;
       }
     }
@@ -252,12 +252,36 @@ function getYearlyStats() {
     maintenance,
   };
 }
+async function loadData() {
+  try {
+    const [devicesRes, usersRes] = await Promise.all([
+      fetch("/api/devices"),
+      fetch("/api/users"),
+    ]);
+
+    if (!devicesRes.ok || !usersRes.ok) throw new Error("Lỗi tải dữ liệu");
+
+    window.devices = await devicesRes.json();
+    window.users = await usersRes.json();
+
+    loadDevices();
+    loadUsers();
+    updateStats();
+  } catch (error) {
+    console.error("Lỗi:", error);
+  }
+}
 // Initialize App
 function initApp() {
   const dateInputs = document.querySelectorAll('input[type="date"]');
   dateInputs.forEach((input) => {
     if (!input.value) input.setAttribute("placeholder", "YYYY-MM-DD");
     input.addEventListener("change", formatDateInput);
+  });
+  // Thêm event listener cho form submit
+  deviceForm.addEventListener("submit", function (e) {
+    e.preventDefault();
+    saveDevice();
   });
   loadDevices();
   loadUsers();
@@ -532,7 +556,7 @@ function addDevice() {
   document.getElementById("deviceId").value = "";
 
   // Load users dropdown
-  const userSelect = document.getElementById("deviceUser");
+  const userSelect = document.getElementById("Nguoisudung");
   userSelect.innerHTML = '<option value="">Không có</option>';
 
   users.forEach((user) => {
@@ -552,15 +576,15 @@ function editDevice(id) {
   if (device) {
     deviceModalTitle.textContent = "Chỉnh sửa thiết bị";
     document.getElementById("deviceId").value = device.id;
-    document.getElementById("deviceCode").value = device.code;
-    document.getElementById("deviceName").value = device.name;
-    document.getElementById("deviceType").value = device.type;
-    document.getElementById("deviceSerial").value = device.serial || "";
-    document.getElementById("purchaseDate").value = device.purchaseDate;
-    document.getElementById("deviceStatus").value = device.status;
+    document.getElementById("MaThietBi").value = device.code;
+    document.getElementById("TenThietBi").value = device.name;
+    document.getElementById("LoaiThietBi").value = device.type;
+    document.getElementById("SerialSN").value = device.serial || "";
+    document.getElementById("NgayNhap").value = device.purchaseDate;
+    document.getElementById("Trangthai").value = device.status;
 
     // Load users dropdown
-    const userSelect = document.getElementById("deviceUser");
+    const userSelect = document.getElementById("Nguoisudung");
     userSelect.innerHTML = '<option value="">Không có</option>';
 
     users.forEach((user) => {
@@ -575,80 +599,42 @@ function editDevice(id) {
   }
 }
 
-function saveDevice() {
-  const id = document.getElementById("deviceId").value;
-  const code = document.getElementById("deviceCode").value;
-  const name = document.getElementById("deviceName").value;
-  const type = document.getElementById("deviceType").value;
-  const serial = document.getElementById("deviceSerial").value; // Thêm dòng này
-  const purchaseDate = document.getElementById("purchaseDate").value;
-  const status = document.getElementById("deviceStatus").value;
-  const userId = document.getElementById("deviceUser").value || null;
+async function saveDevice() {
+  const deviceData = {
+    MaThietBi: document.getElementById("MaThietBi").value,
+    TenThietBi: document.getElementById("TenThietBi").value,
+    LoaiThietBi: document.getElementById("LoaiThietBi").value,
+    SerialSN: document.getElementById("SerialSN").value,
+    NgayNhap: document.getElementById("NgayNhap").value,
+    Trangthai: document.getElementById("Trangthai").value,
+    Nguoisudung: document.getElementById("Nguoisudung").value || null,
+  };
 
-  if (!code || !name || !type || !purchaseDate || !status) {
-    alert("Vui lòng điền đầy đủ thông tin!");
-    return;
-  }
-  if (!serial) {
-    alert("Vui lòng nhập số serial!");
-    return;
-  }
+  try {
+    const method = currentDeviceId ? "PUT" : "POST";
+    const url = currentDeviceId
+      ? `/api/devices/${currentDeviceId}`
+      : "/api/devices";
 
-  if (currentDeviceId) {
-    // Update existing device
-    const index = devices.findIndex((d) => d.id === currentDeviceId);
-    if (index !== -1) {
-      devices[index] = {
-        id: currentDeviceId,
-        code,
-        name,
-        type,
-        serial,
-        purchaseDate,
-        status,
-        userId: userId ? parseInt(userId) : null,
-      };
-
-      // Update user's device if changed
-      if (userId) {
-        const userIndex = users.findIndex((u) => u.id === parseInt(userId));
-        if (userIndex !== -1) {
-          users[userIndex].deviceId = currentDeviceId;
-          users[userIndex].assignDate = purchaseDate;
-        }
-      }
-    }
-  } else {
-    // Add new device
-    const newId =
-      devices.length > 0 ? Math.max(...devices.map((d) => d.id)) + 1 : 1;
-    devices.push({
-      id: newId,
-      code,
-      name,
-      type,
-      serial,
-      purchaseDate,
-      status,
-      userId: userId ? parseInt(userId) : null,
+    const response = await fetch(url, {
+      method,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(deviceData),
     });
 
-    // Update user's device if assigned
-    if (userId) {
-      const userIndex = users.findIndex((u) => u.id === parseInt(userId));
-      if (userIndex !== -1) {
-        users[userIndex].deviceId = newId;
-        users[userIndex].assignDate = purchaseDate;
-      }
+    if (response.ok) {
+      await loadData();
+      deviceModal.style.display = "none";
+      showAlert("Lưu thiết bị thành công", true);
+    } else {
+      const error = await response.json();
+      throw new Error(error.message || "Lỗi khi lưu thiết bị");
     }
+  } catch (error) {
+    console.error("Lỗi:", error);
+    showAlert(error.message, false);
   }
-
-  loadDevices();
-  loadUsers();
-  updateStats();
-  deviceModal.style.display = "none";
 }
-
 // Add/Edit User
 function addUser() {
   currentUserId = null;
@@ -797,48 +783,31 @@ function confirmDelete(type, id) {
   deleteModal.style.display = "flex";
 }
 
-function deleteItem() {
-  if (deleteType === "device") {
-    // Check if device is assigned to any user
-    const assignedUser = users.find((u) => u.deviceId === deleteId);
-    if (assignedUser) {
-      alert("Không thể xóa thiết bị đang được sử dụng!");
+async function deleteItem() {
+  try {
+    const url =
+      deleteType === "device"
+        ? `/api/devices/${deleteId}`
+        : `/api/users/${deleteId}`;
+
+    const response = await fetch(url, { method: "DELETE" });
+
+    if (response.ok) {
+      await loadData();
       deleteModal.style.display = "none";
-      return;
     }
-
-    // Remove device
-    devices = devices.filter((d) => d.id !== deleteId);
-  } else {
-    // Check if user has any device assigned
-    const user = users.find((u) => u.id === deleteId);
-    if (user && user.deviceId) {
-      // Free the device
-      const deviceIndex = devices.findIndex((d) => d.id === user.deviceId);
-      if (deviceIndex !== -1) {
-        devices[deviceIndex].userId = null;
-        devices[deviceIndex].status = "inactive";
-      }
-    }
-
-    // Remove user
-    users = users.filter((u) => u.id !== deleteId);
+  } catch (error) {
+    console.error("Lỗi:", error);
   }
-
-  loadDevices();
-  loadUsers();
-  updateStats();
-  deleteModal.style.display = "none";
 }
-
 // Helper Functions
 function getStatusText(status) {
   switch (status) {
-    case "active":
+    case "Đang sử dụng":
       return "Đang sử dụng";
-    case "maintenance":
+    case "Bảo Hành":
       return "Bảo Hành";
-    case "inactive":
+    case "Sẵn sàng":
       return "Sẵn sàng";
     default:
       return "Không xác định";
@@ -847,12 +816,12 @@ function getStatusText(status) {
 
 function getStatusClass(status) {
   switch (status) {
-    case "active":
-      return "status-active";
-    case "maintenance":
-      return "status-maintenance";
-    case "inactive":
-      return "status-inactive";
+    case "Đang sử dụng":
+      return "Đang sử dụng";
+    case "Bảo Hành":
+      return "Bảo Hành";
+    case "Sẵn sàng":
+      return "Sẵn sàng";
     default:
       return "";
   }
