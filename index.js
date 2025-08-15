@@ -1,261 +1,276 @@
+// index.js — Express + MSSQL + Static
 const express = require("express");
-const bodyParser = require("body-parser");
+const sql = require("mssql");
 const cors = require("cors");
-const sql = require("mssql/msnodesqlv8");
+const path = require("path");
 
 const app = express();
 const port = 3000;
 
-// Cấu hình kết nối SQL Server
+/* ========= CẤU HÌNH SQL SERVER ========= */
 const config = {
-  server: "DESKTOP-A8PDRAJ\\BARTENDER",
-  database: "QuanlyThietBi",
-  driver: "msnodesqlv8",
+  user: "sa",
+  password: "Abc@123456!",
+  server: "DESKTOP-A8PDRAJ",
+  database: "QuanLyThietBi",
   options: {
-    trustedConnection: true,
+    instanceName: "BARTENDER",
+    encrypt: false,
+    trustServerCertificate: true,
   },
 };
 
-// Middleware
-app.use(bodyParser.json());
-app.use(express.static("public"));
+/* ============== MIDDLEWARE CHUNG ============== */
+app.use(express.json());
+
+// CORS: cho phép các origin bạn dùng trong dev (localhost/127.0.0.1/5500 & IP LAN)
+const ALLOWED_ORIGINS = [
+  "http://localhost:3000",
+  "http://127.0.0.1:3000",
+  "http://localhost:5500",
+  "http://127.0.0.1:5500",
+  "http://192.168.11.86:3000",
+  "http://192.168.11.86:5500",
+];
+
 app.use(
   cors({
-    origin: "http://localhost:5500", // Hoặc port của frontend
-    methods: ["GET", "POST", "PUT", "DELETE"],
+    origin: (origin, cb) => {
+      if (!origin || ALLOWED_ORIGINS.includes(origin)) return cb(null, true);
+      return cb(new Error("Not allowed by CORS: " + origin));
+    },
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+    credentials: false,
+    optionsSuccessStatus: 204,
   })
 );
+// preflight
+app.options("*", cors());
 
-// API Thiết bị - Đã điều chỉnh theo cấu trúc bảng
-app.get("/api/devices", async (req, res) => {
+// (khuyên) log request để debug nhanh
+app.use((req, _res, next) => {
+  console.log(`${req.method} ${req.originalUrl}`);
+  next();
+});
+
+/* ======= PHỤC VỤ FRONTEND (STATIC) ======= */
+app.use(express.static(__dirname));
+app.get("/", (_req, res) => res.sendFile(path.join(__dirname, "index.html")));
+app.get("/health", (_req, res) => res.json({ ok: true }));
+
+/* ====== KẾT NỐI SQL POOL + START ====== */
+const poolPromise = new sql.ConnectionPool(config)
+  .connect()
+  .then((pool) => {
+    console.log("✅ Kết nối SQL Server thành công");
+    app.listen(port, "0.0.0.0", () =>
+      console.log(`🚀 Server chạy tại http://192.168.11.86:${port}`)
+    );
+    return pool;
+  })
+  .catch((err) => {
+    console.error("❌ Lỗi kết nối SQL:", err);
+    process.exit(1);
+  });
+
+/* ====== TIỆN ÍCH LỖI SQL ====== */
+function handleSqlError(res, err) {
+  if (err && (err.number === 2627 || err.number === 2601)) {
+    return res.status(409).send("Mã đã tồn tại.");
+  }
+  console.error("SQL error:", err);
+  return res.status(500).send(err?.message || "Lỗi máy chủ.");
+}
+
+/* ========== API /api/devices ========== */
+
+// Lấy danh sách thiết bị
+app.get("/api/devices", async (_req, res) => {
   try {
-    const pool = await sql.connect(config);
-    const result = await pool.request().query("SELECT * FROM THIETBI");
+    const pool = await poolPromise;
+    const result = await pool.request().query("SELECT * FROM dbo.THIETBI");
     res.json(result.recordset);
   } catch (err) {
-    res.status(500).json({ error: err.message });
-  } finally {
-    pool.close(); // Đóng kết nối khi hoàn thành
+    handleSqlError(res, err);
   }
 });
 
+// Thêm thiết bị
 app.post("/api/devices", async (req, res) => {
-  try {
-    const {
-      MaThietBi,
-      TenThietBi,
-      LoaiThietBi,
-      SerialSN,
-      NgayNhap,
-      Trangthai,
-      Nguoisudung,
-    } = req.body;
+  console.log("POST /api/devices body:", req.body);
+  const {
+    MaThietBi,
+    TenThietBi,
+    LoaiThietBi,
+    SerialSN,
+    NgayNhap,
+    Trangthai,
+    Nguoisudung,
+  } = req.body;
 
-    const pool = await sql.connect(config);
+  if (!MaThietBi || !TenThietBi) {
+    return res.status(400).send("Thiếu mã hoặc tên thiết bị");
+  }
+
+  try {
+    const pool = await poolPromise;
     await pool
       .request()
-      .input("MaThietBi", sql.VarChar(20), MaThietBi)
-      .input("TenThietBi", sql.NVarChar(100), TenThietBi)
-      .input("LoaiThietBi", sql.NVarChar(50), LoaiThietBi)
-      .input("SerialSN", sql.VarChar(50), SerialSN)
-      .input("NgayNhap", sql.Date, NgayNhap)
-      .input("Trangthai", sql.NVarChar(50), Trangthai)
-      .input("Nguoisudung", sql.NVarChar(50), Nguoisudung).query(`
-        INSERT INTO THIETBI 
+      .input("MaThietBi", sql.VarChar, MaThietBi)
+      .input("TenThietBi", sql.NVarChar, TenThietBi)
+      .input("LoaiThietBi", sql.NVarChar, LoaiThietBi || "")
+      .input("SerialSN", sql.VarChar, SerialSN || "")
+      .input("NgayNhap", sql.Date, NgayNhap || null)
+      .input("Trangthai", sql.NVarChar, Trangthai || "Sẵn sàng")
+      .input("Nguoisudung", sql.NVarChar, Nguoisudung || null).query(`
+        INSERT INTO dbo.THIETBI
         (MaThietBi, TenThietBi, LoaiThietBi, SerialSN, NgayNhap, Trangthai, Nguoisudung)
-        VALUES 
-        (@MaThietBi, @TenThietBi, @LoaiThietBi, @SerialSN, @NgayNhap, @Trangthai, @Nguoisudung)
-      `);
-    console.log(`Đã thêm nhân viên ${MaNV} vào database`);
-    res.status(201).json({ success: true });
-  } catch (err) {
-    res.status(500).json({
-      error: err.message,
-      details: err.originalError?.info?.message,
-    });
-  } finally {
-    pool.close(); // Đóng kết nối khi hoàn thành
-  }
-});
-
-// API cập nhật thiết bị
-app.put("/api/devices/:MaThietBi", async (req, res) => {
-  try {
-    const { MaThietBi } = req.params;
-    const {
-      TenThietBi,
-      LoaiThietBi,
-      SerialSN,
-      NgayNhap,
-      Trangthai,
-      Nguoisudung,
-    } = req.body;
-
-    const pool = await sql.connect(config);
-    await pool
-      .request()
-      .input("MaThietBi", sql.VarChar(20), MaThietBi)
-      .input("TenThietBi", sql.NVarChar(100), TenThietBi)
-      .input("LoaiThietBi", sql.NVarChar(50), LoaiThietBi)
-      .input("SerialSN", sql.VarChar(50), SerialSN)
-      .input("NgayNhap", sql.Date, NgayNhap)
-      .input("Trangthai", sql.NVarChar(50), Trangthai)
-      .input("Nguoisudung", sql.NVarChar(50), Nguoisudung).query(`
-        UPDATE THIETBI SET
-            MaThietBi = @MaThietBi,
-            TenThietBi = @TenThietBi,
-            LoaiThietBi = @LoaiThietBi,
-            SerialSN = @SerialSN,
-            NgayNhap = @NgayNhap,
-            Trangthai = @Trangthai,
-            Nguoisudung = @Nguoisudung
-        WHERE MaThietBi = @MaThietBi
+        VALUES (@MaThietBi, @TenThietBi, @LoaiThietBi, @SerialSN, @NgayNhap, @Trangthai, @Nguoisudung)
       `);
 
-    res.json({ success: true });
+    res.send("Thêm thiết bị thành công");
   } catch (err) {
-    res.status(500).json({ error: err.message });
-  } finally {
-    pool.close(); // Đóng kết nối khi hoàn thành
+    handleSqlError(res, err);
   }
 });
-// THÊM DELETE DEVICE Ở ĐÂY
-app.delete("/api/devices/:MaThietBi", async (req, res) => {
+
+// Sửa thiết bị
+app.put("/api/devices/:id", async (req, res) => {
+  console.log("PUT /api/devices/:id", req.params.id, req.body);
+  const { id } = req.params;
+  const {
+    TenThietBi,
+    LoaiThietBi,
+    SerialSN,
+    NgayNhap,
+    Trangthai,
+    Nguoisudung,
+  } = req.body;
+
   try {
-    const { MaThietBi } = req.params;
-    const pool = await sql.connect(config);
-    const checkUsage = await pool
-      .request()
-      .input("MaThietBi", sql.VarChar(20), MaThietBi)
-      .query(
-        "SELECT COUNT(*) AS count FROM NHANVIEN WHERE MaThietBi = @MaThietBi"
-      ); // Sửa deviceId thành MaThietBi nếu cần
-
-    if (checkUsage.recordset[0].count > 0) {
-      return res
-        .status(400)
-        .json({ error: "Thiết bị đang được sử dụng, không thể xóa" });
-    }
-
+    const pool = await poolPromise;
     await pool
       .request()
-      .input("MaThietBi", sql.VarChar(20), MaThietBi)
-      .query("DELETE FROM THIETBI WHERE MaThietBi = @MaThietBi");
+      .input("MaThietBi", sql.VarChar, id)
+      .input("TenThietBi", sql.NVarChar, TenThietBi || "")
+      .input("LoaiThietBi", sql.NVarChar, LoaiThietBi || "")
+      .input("SerialSN", sql.VarChar, SerialSN || "")
+      .input("NgayNhap", sql.Date, NgayNhap || null)
+      .input("Trangthai", sql.NVarChar, Trangthai || "Sẵn sàng")
+      .input("Nguoisudung", sql.NVarChar, Nguoisudung || null).query(`
+        UPDATE dbo.THIETBI
+        SET TenThietBi=@TenThietBi, LoaiThietBi=@LoaiThietBi, SerialSN=@SerialSN,
+            NgayNhap=@NgayNhap, Trangthai=@Trangthai, Nguoisudung=@Nguoisudung
+        WHERE MaThietBi=@MaThietBi
+      `);
 
-    res.json({ success: true });
+    res.send("Cập nhật thiết bị thành công");
   } catch (err) {
-    res.status(500).json({ error: err.message });
-  } finally {
-    pool.close(); // Đóng kết nối khi hoàn thành
+    handleSqlError(res, err);
   }
 });
-// API NHÂN VIÊN (USERS)
+
+// Xóa thiết bị
+app.delete("/api/devices/:id", async (req, res) => {
+  console.log("DELETE /api/devices/:id", req.params.id);
+  try {
+    const pool = await poolPromise;
+    await pool
+      .request()
+      .input("MaThietBi", sql.VarChar, req.params.id)
+      .query("DELETE FROM dbo.THIETBI WHERE MaThietBi=@MaThietBi");
+
+    res.send("Xóa thiết bị thành công");
+  } catch (err) {
+    handleSqlError(res, err);
+  }
+});
+
+/* ========== API /api/users ========== */
+
 // Lấy danh sách nhân viên
-app.get("/api/users", async (req, res) => {
+app.get("/api/users", async (_req, res) => {
   try {
-    const pool = await sql.connect(config);
-    const result = await pool.request().query("SELECT * FROM NHANVIEN");
+    const pool = await poolPromise;
+    const result = await pool.request().query("SELECT * FROM dbo.NHANVIEN");
     res.json(result.recordset);
   } catch (err) {
-    res.status(500).json({ error: err.message });
-  } finally {
-    pool.close(); // Đóng kết nối khi hoàn thành
+    handleSqlError(res, err);
   }
 });
 
-// Thêm nhân viên mới
+// Thêm nhân viên
 app.post("/api/users", async (req, res) => {
-  try {
-    const { MaNV, HoVaTen, Phongban, Thietbisudung, Ngaycap, Trangthai } =
-      req.body;
-    const pool = await sql.connect(config);
+  console.log("POST /api/users body:", req.body);
+  const { MaNV, HoVaTen, Phongban, Thietbisudung, Ngaycap, Trangthai } =
+    req.body;
 
+  if (!MaNV || !HoVaTen) {
+    return res.status(400).send("Thiếu mã hoặc họ tên nhân viên");
+  }
+
+  try {
+    const pool = await poolPromise;
     await pool
       .request()
-      .input("MaNV", sql.VarChar(50), MaNV)
-      .input("HoVaTen", sql.NVarChar(50), HoVaTen)
-      .input("Phongban", sql.NVarChar(50), Phongban)
-      .input("Thietbisudung", sql.VarChar(50), Thietbisudung)
-      .input("Ngaycap", sql.Date, Ngaycap)
-      .input("Trangthai", sql.NVarChar(20), Trangthai).query(`
-        INSERT INTO NHANVIEN (MaNV, HoVaTen, Phongban, Thietbisudung, Ngaycap, Trangthai)
+      .input("MaNV", sql.VarChar, MaNV)
+      .input("HoVaTen", sql.NVarChar, HoVaTen)
+      .input("Phongban", sql.NVarChar, Phongban || "")
+      .input("Thietbisudung", sql.VarChar, Thietbisudung || null)
+      .input("Ngaycap", sql.Date, Ngaycap || null)
+      .input("Trangthai", sql.NVarChar, Trangthai || "Chưa cấp").query(`
+        INSERT INTO dbo.NHANVIEN
+        (MaNV, HoVaTen, Phongban, Thietbisudung, Ngaycap, Trangthai)
         VALUES (@MaNV, @HoVaTen, @Phongban, @Thietbisudung, @Ngaycap, @Trangthai)
       `);
-    console.log(`Đã thêm nhân viên ${MaNV} vào database`);
-    res.status(201).json({ success: true });
+
+    res.send("Thêm nhân viên thành công");
   } catch (err) {
-    res.status(500).json({ error: err.message });
-  } finally {
-    pool.close(); // Đóng kết nối khi hoàn thành
+    handleSqlError(res, err);
   }
 });
 
-// Cập nhật nhân viên
-app.put("/api/users/:MaNV", async (req, res) => {
-  try {
-    const { MaNV } = req.params;
-    const { HoVaTen, Phongban, Thietbisudung, Ngaycap, Trangthai } = req.body;
-    const pool = await sql.connect(config);
+// Sửa nhân viên
+app.put("/api/users/:id", async (req, res) => {
+  console.log("PUT /api/users/:id", req.params.id, req.body);
+  const { id } = req.params;
+  const { HoVaTen, Phongban, Thietbisudung, Ngaycap, Trangthai } = req.body;
 
+  try {
+    const pool = await poolPromise;
     await pool
       .request()
-      .input("MaNV", sql.VarChar(50), MaNV)
-      .input("HoVaTen", sql.NVarChar(50), HoVaTen)
-      .input("Phongban", sql.NVarChar(50), Phongban)
-      .input("Thietbisudung", sql.VarChar(50), Thietbisudung)
-      .input("Ngaycap", sql.Date, Ngaycap)
-      .input("Trangthai", sql.NVarChar(20), Trangthai).query(`
-        UPDATE NHANVIEN SET
-          MaNV = @MaNV,
-          HoVaTen = @HoVaTen,
-          Phongban = @Phongban,
-          Thietbisudung = @Thietbisudung,
-          Ngaycap = @Ngaycap,
-          Trangthai = @Trangthai
-        WHERE MaNV = @MaNV
+      .input("MaNV", sql.VarChar, id)
+      .input("HoVaTen", sql.NVarChar, HoVaTen || "")
+      .input("Phongban", sql.NVarChar, Phongban || "")
+      .input("Thietbisudung", sql.VarChar, Thietbisudung || null)
+      .input("Ngaycap", sql.Date, Ngaycap || null)
+      .input("Trangthai", sql.NVarChar, Trangthai || "Chưa cấp").query(`
+        UPDATE dbo.NHANVIEN
+        SET HoVaTen=@HoVaTen, Phongban=@Phongban, Thietbisudung=@Thietbisudung,
+            Ngaycap=@Ngaycap, Trangthai=@Trangthai
+        WHERE MaNV=@MaNV
       `);
 
-    res.json({ success: true });
+    res.send("Cập nhật nhân viên thành công");
   } catch (err) {
-    res.status(500).json({ error: err.message });
-  } finally {
-    pool.close(); // Đóng kết nối khi hoàn thành
+    handleSqlError(res, err);
   }
 });
 
 // Xóa nhân viên
-app.delete("/api/users/:MaNV", async (req, res) => {
+app.delete("/api/users/:id", async (req, res) => {
+  console.log("DELETE /api/users/:id", req.params.id);
   try {
-    const { MaNV } = req.params;
-    const pool = await sql.connect(config);
-
-    // Kiểm tra nếu nhân viên đang sử dụng thiết bị
-    const checkDevice = await pool
-      .request()
-      .input("MaNV", sql.VarChar(50), MaNV)
-      .query(
-        "SELECT Thietbisudung FROM NHANVIEN WHERE MaNV = @MaNV AND Thietbisudung IS NOT NULL"
-      );
-
-    if (checkDevice.recordset.length > 0) {
-      return res
-        .status(400)
-        .json({ error: "Nhân viên đang sử dụng thiết bị, không thể xóa" });
-    }
-
+    const pool = await poolPromise;
     await pool
       .request()
-      .input("MaNV", sql.VarChar(50), MaNV)
-      .query("DELETE FROM NHANVIEN WHERE MaNV = @MaNV");
+      .input("MaNV", sql.VarChar, req.params.id)
+      .query("DELETE FROM dbo.NHANVIEN WHERE MaNV=@MaNV");
 
-    res.json({ success: true });
+    res.send("Xóa nhân viên thành công");
   } catch (err) {
-    res.status(500).json({ error: err.message });
-  } finally {
-    pool.close(); // Đóng kết nối khi hoàn thành
+    handleSqlError(res, err);
   }
-});
-// Khởi động server
-app.listen(port, () => {
-  console.log(`Server đang chạy tại http://localhost:${port}`);
 });

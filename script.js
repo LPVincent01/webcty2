@@ -1,115 +1,38 @@
-let devices = [
-  {
-    id: 1,
-    code: "TB001",
-    name: "Laptop Dell XPS 15",
-    type: "Laptop",
-    serial: "20250801",
-    purchaseDate: "2023-03-15",
-    status: "Đang sử dụng",
-    userId: 1,
-  },
-  {
-    id: 2,
-    code: "TB002",
-    name: "MacBook Pro M1",
-    type: "Laptop",
-    serial: "20250802",
-    purchaseDate: "2023-03-20",
-    status: "Đang sử dụng",
-    userId: 2,
-  },
-  {
-    id: 3,
-    code: "TB003",
-    name: "PC Workstation",
-    type: "Máy bàn",
-    serial: "20250803",
-    purchaseDate: "2023-04-05",
-    status: "Bảo Hành",
-    userId: null,
-  },
-  {
-    id: 4,
-    code: "TB004",
-    name: 'iPad Pro 12.9"',
-    type: "Tablet",
-    serial: "20250804",
-    purchaseDate: "2023-04-10",
-    status: "Đang sử dụng",
-    userId: 3,
-  },
-  {
-    id: 5,
-    code: "TB005",
-    name: 'Monitor Dell 27"',
-    type: "Màn hình",
-    serial: "20250805",
-    purchaseDate: "2023-04-15",
-    status: "Sẵn sàng",
-    userId: null,
-  },
-];
+/***********************
+ * CẤU HÌNH API
+ ***********************/
+const API_BASE = (() => {
+  // Nếu đang chạy chung port 3000 (mở web từ backend) -> xài origin hiện tại
+  if (window.location.origin.includes(":3000")) return window.location.origin;
 
-let users = [
-  {
-    id: 1,
-    code: "NV001",
-    name: "Nguyễn Văn A",
-    department: "Kế toán",
-    deviceId: 1,
-    assignDate: "2023-03-20",
-  },
-  {
-    id: 2,
-    code: "NV002",
-    name: "Trần Thị B",
-    department: "Nhân sự",
-    deviceId: 2,
-    assignDate: "2023-03-25",
-  },
-  {
-    id: 3,
-    code: "NV003",
-    name: "Lê Văn C",
-    department: "Theo đơn",
-    deviceId: 4,
-    assignDate: "2023-04-12",
-  },
-  {
-    id: 4,
-    code: "NV004",
-    name: "Phạm Thị D",
-    department: "IT",
-    deviceId: 3,
-    assignDate: "2023-04-10",
-  },
-  {
-    id: 5,
-    code: "NV005",
-    name: "Hoàng Văn E",
-    department: "Xuất nhập khẩu",
-    deviceId: null,
-    assignDate: null,
-  },
-];
+  // Mặc định khi dùng Live Server/Preview (5500…) -> ĐỔI IP dưới đây theo máy bạn nếu cần
+  // Ví dụ LAN: http://192.168.11.86:3000, hoặc để localhost nếu front & back cùng máy.
+  const FALLBACK = "http://192.168.11.86:3000";
+  return window.__API_BASE__ || FALLBACK; // có thể override bằng window.__API_BASE__
+})();
 
-// Chart Data
-const monthlyData = {
-  labels: ["Tháng 1", "Tháng 2", "Tháng 3", "Tháng 4", "Tháng 5", "Tháng 6"],
-  purchased: [5, 8, 12, 15, 3, 2],
-  active: [3, 6, 10, 12, 10, 8],
-  maintenance: [1, 2, 2, 3, 2, 1],
-};
+const api = (url) => (url.startsWith("http") ? url : `${API_BASE}${url}`);
 
-const yearlyData = {
-  labels: ["2019", "2020", "2021", "2022", "2023"],
-  purchased: [25, 30, 35, 40, 45],
-  active: [20, 25, 28, 32, 38],
-  maintenance: [5, 5, 7, 8, 7],
-};
+async function fetchJson(url, options = {}) {
+  try {
+    const res = await fetch(api(url), options);
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`HTTP ${res.status} ${res.statusText} — ${text}`);
+    }
+    if (res.status === 204) return null;
+    const ct = res.headers.get("content-type") || "";
+    return ct.includes("application/json") ? res.json() : res.text();
+  } catch (err) {
+    console.error("API Error:", err);
+    showAlert(err.message || "Lỗi kết nối API", false);
+    return null;
+  }
+}
 
-// DOM Elements
+/***********************
+ * DOM ELEMENTS
+ ***********************/
 const loginPage = document.getElementById("loginPage");
 const appContainer = document.getElementById("appContainer");
 const loginBtn = document.getElementById("loginBtn");
@@ -117,40 +40,34 @@ const logoutBtn = document.getElementById("logoutBtn");
 const menuItems = document.querySelectorAll(".sidebar-menu a");
 const contentSections = document.querySelectorAll(".content-section");
 
-// Device Elements
+// Bảng & Modal
 const devicesTableBody = document.getElementById("devicesTableBody");
+const usersTableBody = document.getElementById("usersTableBody");
+
 const addDeviceBtn = document.getElementById("addDeviceBtn");
+const addUserBtn = document.getElementById("addUserBtn");
+
 const deviceModal = document.getElementById("deviceModal");
-const deviceModalTitle = document.getElementById("deviceModalTitle");
+const userModal = document.getElementById("userModal");
+const deleteModal = document.getElementById("deleteModal");
+
 const closeDeviceModal = document.getElementById("closeDeviceModal");
 const cancelDeviceBtn = document.getElementById("cancelDeviceBtn");
 const saveDeviceBtn = document.getElementById("saveDeviceBtn");
-const deviceForm = document.getElementById("deviceForm");
 
-// User Elements
-const usersTableBody = document.getElementById("usersTableBody");
-const addUserBtn = document.getElementById("addUserBtn");
-const userModal = document.getElementById("userModal");
-const userModalTitle = document.getElementById("userModalTitle");
 const closeUserModal = document.getElementById("closeUserModal");
 const cancelUserBtn = document.getElementById("cancelUserBtn");
 const saveUserBtn = document.getElementById("saveUserBtn");
-const userForm = document.getElementById("userForm");
 
-// Delete Elements
-const deleteModal = document.getElementById("deleteModal");
 const closeDeleteModal = document.getElementById("closeDeleteModal");
 const cancelDeleteBtn = document.getElementById("cancelDeleteBtn");
 const confirmDeleteBtn = document.getElementById("confirmDeleteBtn");
-const deleteMessage = document.getElementById("deleteMessage");
 
-// Chart Elements
-const monthlyChartCtx = document
-  .getElementById("monthlyChart")
-  .getContext("2d");
-const yearlyChartCtx = document.getElementById("yearlyChart").getContext("2d");
+// Form
+const deviceForm = document.getElementById("deviceForm");
+const userForm = document.getElementById("userForm");
 
-// Stats Elements
+// Stats
 const totalDevicesEl = document.getElementById("totalDevices");
 const activeDevicesEl = document.getElementById("activeDevices");
 const maintenanceDevicesEl = document.getElementById("maintenanceDevices");
@@ -168,237 +85,114 @@ const yearlyMaintenancePercentEl = document.getElementById(
   "yearlyMaintenancePercent"
 );
 
-// Current Year
-const currentYear = 2025;
-document.getElementById("currentYear").textContent = currentYear;
-document.getElementById("currentYear2").textContent = currentYear;
+// Charts
+const monthlyChartCtx = document
+  .getElementById("monthlyChart")
+  .getContext("2d");
+const yearlyChartCtx = document.getElementById("yearlyChart").getContext("2d");
 
-// Variables
+/***********************
+ * STATE
+ ***********************/
+let devices = [];
+let users = [];
+let monthlyChart, yearlyChart;
 let currentDeviceId = null;
 let currentUserId = null;
 let deleteType = null;
 let deleteId = null;
 
-// Charts
-let monthlyChart, yearlyChart;
-
-// Thêm các hàm này ngay trước hàm initApp
-function getMonthlyStats() {
-  const currentYear = new Date().getFullYear();
-  const months = [
-    "Tháng 1",
-    "Tháng 2",
-    "Tháng 3",
-    "Tháng 4",
-    "Tháng 5",
-    "Tháng 6",
-  ];
-
-  const purchased = Array(6).fill(0);
-  const active = Array(6).fill(0);
-  const maintenance = Array(6).fill(0);
-
-  devices.forEach((device) => {
-    const date = new Date(device.purchaseDate);
-    if (date.getFullYear() === currentYear) {
-      const month = date.getMonth();
-      if (month >= 0 && month < 6) {
-        purchased[month]++;
-
-        if (device.status === "Đang sử dụng") {
-          active[month]++;
-        } else if (device.status === "Bảo Hành") {
-          maintenance[month]++;
-        }
-      }
-    }
-  });
-
-  return {
-    labels: months,
-    purchased,
-    active,
-    maintenance,
-  };
+/***********************
+ * LOAD DATA
+ ***********************/
+async function loadDevices() {
+  const data = await fetchJson("/api/devices");
+  if (!data) return;
+  devices = data;
+  renderDevicesTable();
 }
 
-function getYearlyStats() {
-  const years = ["2019", "2020", "2021", "2022", "2023"];
-
-  const purchased = Array(5).fill(0);
-  const active = Array(5).fill(0);
-  const maintenance = Array(5).fill(0);
-
-  devices.forEach((device) => {
-    const date = new Date(device.purchaseDate);
-    const year = date.getFullYear();
-    const yearIndex = years.indexOf(year.toString());
-
-    if (yearIndex !== -1) {
-      purchased[yearIndex]++;
-
-      if (device.status === "Đang sử dụng") {
-        active[yearIndex]++;
-      } else if (device.status === "Bảo Hành") {
-        maintenance[yearIndex]++;
-      }
-    }
-  });
-
-  return {
-    labels: years,
-    purchased,
-    active,
-    maintenance,
-  };
+async function loadUsers() {
+  const data = await fetchJson("/api/users");
+  if (!data) return;
+  users = data;
+  renderUsersTable();
 }
-async function loadData() {
-  try {
-    const [devicesRes, usersRes] = await Promise.all([
-      fetch("/api/devices"),
-      fetch("/api/users"),
-    ]);
 
-    if (!devicesRes.ok || !usersRes.ok) throw new Error("Lỗi tải dữ liệu");
-
-    window.devices = await devicesRes.json();
-    window.users = await usersRes.json();
-
-    loadDevices();
-    loadUsers();
-    updateStats();
-  } catch (error) {
-    console.error("Lỗi:", error);
-  }
-}
-// Initialize App
-function initApp() {
-  const dateInputs = document.querySelectorAll('input[type="date"]');
-  dateInputs.forEach((input) => {
-    if (!input.value) input.setAttribute("placeholder", "YYYY-MM-DD");
-    input.addEventListener("change", formatDateInput);
-  });
-  // Thêm event listener cho form submit
-  deviceForm.addEventListener("submit", function (e) {
-    e.preventDefault();
-    saveDevice();
-  });
-  loadDevices();
-  loadUsers();
+async function loadAllData() {
+  await Promise.all([loadDevices(), loadUsers()]);
   updateStats();
   initCharts();
 }
-function formatDateInput() {
-  if (this.value) {
-    const parts = this.value.split("-");
-    if (parts.length === 3) {
-      this.value = `${parts[0]}-${parts[1]}-${parts[2]}`;
-    }
-  }
-}
-// Load Devices
-function loadDevices() {
+
+/***********************
+ * RENDER TABLES
+ ***********************/
+function renderDevicesTable() {
   devicesTableBody.innerHTML = "";
-
-  devices.forEach((device) => {
-    const user = users.find((u) => u.id === device.userId);
-    const statusText = getStatusText(device.status);
-    const statusClass = getStatusClass(device.status);
-
-    const row = document.createElement("tr");
-    row.innerHTML = `
-                    <td>${device.code}</td>
-                    <td>${device.name}</td>
-                    <td>${device.type}</td>
-                    <td>${device.serial || "-"}</td>
-                    <td>${formatDate(device.purchaseDate)}</td>
-                    <td><span class="status-badge ${statusClass}">${statusText}</span></td>
-                    <td>${user ? user.name : "-"}</td>
-                    <td>
-                        <div class="action-btns">
-                            <button class="btn btn-primary btn-sm edit-device" data-id="${
-                              device.id
-                            }">
-                                <i class="fas fa-edit"></i>
-                            </button>
-                            <button class="btn btn-danger btn-sm delete-device" data-id="${
-                              device.id
-                            }">
-                                <i class="fas fa-trash"></i>
-                            </button>
-                        </div>
-                    </td>
-                `;
-
-    devicesTableBody.appendChild(row);
-  });
-
-  // Add event listeners to edit/delete buttons
-  document.querySelectorAll(".edit-device").forEach((btn) => {
-    btn.addEventListener("click", () => editDevice(btn.dataset.id));
-  });
-
-  document.querySelectorAll(".delete-device").forEach((btn) => {
-    btn.addEventListener("click", () =>
-      confirmDelete("device", btn.dataset.id)
-    );
+  devices.forEach((d) => {
+    devicesTableBody.innerHTML += `
+      <tr>
+        <td>${d.MaThietBi}</td>
+        <td>${d.TenThietBi}</td>
+        <td>${d.LoaiThietBi}</td>
+        <td>${d.SerialSN || "-"}</td>
+        <td>${formatDate(d.NgayNhap)}</td>
+        <td><span class="status-badge ${getStatusClass(d.Trangthai)}">${
+      d.Trangthai
+    }</span></td>
+        <td>${d.Nguoisudung || "-"}</td>
+        <td>
+          <div class="action-btns">
+            <button class="btn btn-primary btn-sm" onclick="editDevice('${
+              d.MaThietBi
+            }')"><i class="fas fa-edit"></i></button>
+            <button class="btn btn-danger btn-sm" onclick="confirmDelete('device','${
+              d.MaThietBi
+            }')"><i class="fas fa-trash"></i></button>
+          </div>
+        </td>
+      </tr>`;
   });
 }
 
-// Load Users
-function loadUsers() {
+function renderUsersTable() {
   usersTableBody.innerHTML = "";
-
-  users.forEach((user) => {
-    const device = devices.find((d) => d.id === user.deviceId);
-    const statusText = user.deviceId ? "Đang sử dụng" : "Chưa cấp";
-    const statusClass = user.deviceId ? "status-active" : "status-inactive";
-
-    const row = document.createElement("tr");
-    row.innerHTML = `
-                    <td>${user.code}</td>
-                    <td>${user.name}</td>
-                    <td>${user.department}</td>
-                    <td>${device ? `${device.name} (${device.code})` : "-"}</td>
-                    <td>${
-                      user.assignDate ? formatDate(user.assignDate) : "-"
-                    }</td>
-                    <td><span class="status-badge ${statusClass}">${statusText}</span></td>
-                    <td>
-                        <div class="action-btns">
-                            <button class="btn btn-primary btn-sm edit-user" data-id="${
-                              user.id
-                            }">
-                                <i class="fas fa-edit"></i>
-                            </button>
-                            <button class="btn btn-danger btn-sm delete-user" data-id="${
-                              user.id
-                            }">
-                                <i class="fas fa-trash"></i>
-                            </button>
-                        </div>
-                    </td>
-                `;
-
-    usersTableBody.appendChild(row);
-  });
-
-  // Add event listeners to edit/delete buttons
-  document.querySelectorAll(".edit-user").forEach((btn) => {
-    btn.addEventListener("click", () => editUser(btn.dataset.id));
-  });
-
-  document.querySelectorAll(".delete-user").forEach((btn) => {
-    btn.addEventListener("click", () => confirmDelete("user", btn.dataset.id));
+  users.forEach((u) => {
+    usersTableBody.innerHTML += `
+      <tr>
+        <td>${u.MaNV}</td>
+        <td>${u.HoVaTen}</td>
+        <td>${u.Phongban}</td>
+        <td>${u.Thietbisudung || "-"}</td>
+        <td>${u.Ngaycap ? formatDate(u.Ngaycap) : "-"}</td>
+        <td>
+          <span class="status-badge ${
+            u.Trangthai === "Đang sử dụng" ? "status-active" : "status-inactive"
+          }">${u.Trangthai || "Chưa cấp"}</span>
+        </td>
+        <td>
+          <div class="action-btns">
+            <button class="btn btn-primary btn-sm" onclick="editUser('${
+              u.MaNV
+            }')"><i class="fas fa-edit"></i></button>
+            <button class="btn btn-danger btn-sm" onclick="confirmDelete('user','${
+              u.MaNV
+            }')"><i class="fas fa-trash"></i></button>
+          </div>
+        </td>
+      </tr>`;
   });
 }
 
-// Update Statistics
+/***********************
+ * STATS & CHARTS
+ ***********************/
 function updateStats() {
   const total = devices.length;
-  const active = devices.filter((d) => d.status === "active").length;
-  const maintenance = devices.filter((d) => d.status === "maintenance").length;
-  const available = devices.filter((d) => d.status === "inactive").length;
+  const active = devices.filter((d) => d.Trangthai === "Đang sử dụng").length;
+  const maintenance = devices.filter((d) => d.Trangthai === "Bảo Hành").length;
+  const available = devices.filter((d) => d.Trangthai === "Sẵn sàng").length;
 
   totalDevicesEl.textContent = total;
   activeDevicesEl.textContent = active;
@@ -406,69 +200,30 @@ function updateStats() {
   availableDevicesEl.textContent = available;
 
   const newDevices = devices.filter((d) => {
-    const purchaseDate = new Date(d.purchaseDate);
-    const currentDate = new Date();
-    const diffTime = currentDate - purchaseDate;
-    const diffDays = diffTime / (1000 * 60 * 60 * 24);
+    const diffDays =
+      (new Date() - new Date(d.NgayNhap)) / (1000 * 60 * 60 * 24);
     return diffDays <= 30;
   }).length;
 
   newDevicesTextEl.textContent = `+${newDevices} thiết bị mới trong tháng`;
-  activePercentEl.textContent = `${Math.round(
-    (active / total) * 100
+  activePercentEl.textContent = `${percent(active, total)}% tổng số thiết bị`;
+  maintenancePercentEl.textContent = `${percent(
+    maintenance,
+    total
   )}% tổng số thiết bị`;
-  maintenancePercentEl.textContent = `${Math.round(
-    (maintenance / total) * 100
-  )}% tổng số thiết bị`;
-  availablePercentEl.textContent = `${Math.round(
-    (available / total) * 100
+  availablePercentEl.textContent = `${percent(
+    available,
+    total
   )}% tổng số thiết bị`;
 }
 
-// Lấy dữ liệu năm hiện tại từ biểu đồ
-const yearlyStats = getYearlyStats();
-const currentYearIndex = yearlyStats.labels.indexOf(currentYear.toString());
-
-if (currentYearIndex !== -1) {
-  const yearlyPurchased = yearlyStats.purchased[currentYearIndex];
-  const yearlyActive = yearlyStats.active[currentYearIndex];
-  const yearlyMaintenance = yearlyStats.maintenance[currentYearIndex];
-
-  yearlyPurchasedEl.textContent = yearlyPurchased;
-  yearlyActiveEl.textContent = yearlyActive;
-  yearlyMaintenanceEl.textContent = yearlyMaintenance;
-
-  yearlyActivePercentEl.textContent = `${Math.round(
-    (yearlyActive / yearlyPurchased) * 100
-  )}% tổng mua mới`;
-  yearlyMaintenancePercentEl.textContent = `${Math.round(
-    (yearlyMaintenance / yearlyPurchased) * 100
-  )}% tổng mua mới`;
-}
-// Cập nhật biểu đồ nếu đang hiển thị
-if (monthlyChart) {
-  const monthlyStats = getMonthlyStats();
-  monthlyChart.data.datasets[0].data = monthlyStats.purchased;
-  monthlyChart.data.datasets[1].data = monthlyStats.active;
-  monthlyChart.data.datasets[2].data = monthlyStats.maintenance;
-  monthlyChart.update();
-}
-
-if (yearlyChart) {
-  const yearlyStats = getYearlyStats();
-  yearlyChart.data.datasets[0].data = yearlyStats.purchased;
-  yearlyChart.data.datasets[1].data = yearlyStats.active;
-  yearlyChart.data.datasets[2].data = yearlyStats.maintenance;
-  yearlyChart.update();
-}
-
-// Initialize Charts
-// Thay thế toàn bộ hàm initCharts hiện có bằng hàm này
 function initCharts() {
   const monthlyStats = getMonthlyStats();
   const yearlyStats = getYearlyStats();
 
-  // Monthly Chart
+  if (monthlyChart) monthlyChart.destroy();
+  if (yearlyChart) yearlyChart.destroy();
+
   monthlyChart = new Chart(monthlyChartCtx, {
     type: "bar",
     data: {
@@ -477,38 +232,23 @@ function initCharts() {
         {
           label: "Mua mới",
           data: monthlyStats.purchased,
-          backgroundColor: "rgba(52, 152, 219, 0.7)",
-          borderColor: "rgba(52, 152, 219, 1)",
-          borderWidth: 1,
+          backgroundColor: "rgba(52,152,219,0.7)",
         },
         {
           label: "Đang sử dụng",
           data: monthlyStats.active,
-          backgroundColor: "rgba(46, 204, 113, 0.7)",
-          borderColor: "rgba(46, 204, 113, 1)",
-          borderWidth: 1,
+          backgroundColor: "rgba(46,204,113,0.7)",
         },
         {
           label: "Bảo Hành",
           data: monthlyStats.maintenance,
-          backgroundColor: "rgba(243, 156, 18, 0.7)",
-          borderColor: "rgba(243, 156, 18, 1)",
-          borderWidth: 1,
+          backgroundColor: "rgba(243,156,18,0.7)",
         },
       ],
     },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      scales: {
-        y: {
-          beginAtZero: true,
-        },
-      },
-    },
+    options: { responsive: true, maintainAspectRatio: false },
   });
 
-  // Yearly Chart
   yearlyChart = new Chart(yearlyChartCtx, {
     type: "bar",
     data: {
@@ -517,412 +257,389 @@ function initCharts() {
         {
           label: "Mua mới",
           data: yearlyStats.purchased,
-          backgroundColor: "rgba(52, 152, 219, 0.7)",
-          borderColor: "rgba(52, 152, 219, 1)",
-          borderWidth: 1,
+          backgroundColor: "rgba(52,152,219,0.7)",
         },
         {
           label: "Đang sử dụng",
           data: yearlyStats.active,
-          backgroundColor: "rgba(46, 204, 113, 0.7)",
-          borderColor: "rgba(46, 204, 113, 1)",
-          borderWidth: 1,
+          backgroundColor: "rgba(46,204,113,0.7)",
         },
         {
           label: "Bảo Hành",
           data: yearlyStats.maintenance,
-          backgroundColor: "rgba(243, 156, 18, 0.7)",
-          borderColor: "rgba(243, 156, 18, 1)",
-          borderWidth: 1,
+          backgroundColor: "rgba(243,156,18,0.7)",
         },
       ],
     },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      scales: {
-        y: {
-          beginAtZero: true,
-        },
-      },
-    },
+    options: { responsive: true, maintainAspectRatio: false },
   });
+
+  const currentYearStr = String(new Date().getFullYear());
+  const idx = yearlyStats.labels.indexOf(currentYearStr);
+  if (idx !== -1) {
+    yearlyPurchasedEl.textContent = yearlyStats.purchased[idx];
+    yearlyActiveEl.textContent = yearlyStats.active[idx];
+    yearlyMaintenanceEl.textContent = yearlyStats.maintenance[idx];
+    yearlyActivePercentEl.textContent = `${percent(
+      yearlyStats.active[idx],
+      yearlyStats.purchased[idx]
+    )}% tổng mua mới`;
+    yearlyMaintenancePercentEl.textContent = `${percent(
+      yearlyStats.maintenance[idx],
+      yearlyStats.purchased[idx]
+    )}% tổng mua mới`;
+  }
 }
-// Add/Edit Device
+
+function getMonthlyStats() {
+  const months = [
+    "Tháng 1",
+    "Tháng 2",
+    "Tháng 3",
+    "Tháng 4",
+    "Tháng 5",
+    "Tháng 6",
+  ];
+  const purchased = Array(6).fill(0);
+  const active = Array(6).fill(0);
+  const maintenance = Array(6).fill(0);
+
+  devices.forEach((d) => {
+    const m = new Date(d.NgayNhap).getMonth();
+    if (m >= 0 && m < 6) {
+      purchased[m]++;
+      if (d.Trangthai === "Đang sử dụng") active[m]++;
+      if (d.Trangthai === "Bảo Hành") maintenance[m]++;
+    }
+  });
+
+  return { labels: months, purchased, active, maintenance };
+}
+
+function getYearlyStats() {
+  const years = ["2019", "2020", "2021", "2022", "2023", "2024", "2025"];
+  const purchased = Array(years.length).fill(0);
+  const active = Array(years.length).fill(0);
+  const maintenance = Array(years.length).fill(0);
+
+  devices.forEach((d) => {
+    const y = String(new Date(d.NgayNhap).getFullYear());
+    const i = years.indexOf(y);
+    if (i !== -1) {
+      purchased[i]++;
+      if (d.Trangthai === "Đang sử dụng") active[i]++;
+      if (d.Trangthai === "Bảo Hành") maintenance[i]++;
+    }
+  });
+
+  return { labels: years, purchased, active, maintenance };
+}
+
+/***********************
+ * CRUD THIẾT BỊ
+ ***********************/
 function addDevice() {
   currentDeviceId = null;
-  deviceModalTitle.textContent = "Thêm thiết bị mới";
   deviceForm.reset();
-  document.getElementById("deviceId").value = "";
-
-  // Load users dropdown
-  const userSelect = document.getElementById("Nguoisudung");
-  userSelect.innerHTML = '<option value="">Không có</option>';
-
-  users.forEach((user) => {
-    const option = document.createElement("option");
-    option.value = user.id;
-    option.textContent = user.name;
-    userSelect.appendChild(option);
-  });
-
+  loadUsersForDeviceSelect();
   deviceModal.style.display = "flex";
 }
 
 function editDevice(id) {
-  currentDeviceId = parseInt(id);
-  const device = devices.find((d) => d.id === currentDeviceId);
+  const d = devices.find((x) => x.MaThietBi === id);
+  if (!d) return;
 
-  if (device) {
-    deviceModalTitle.textContent = "Chỉnh sửa thiết bị";
-    document.getElementById("deviceId").value = device.id;
-    document.getElementById("MaThietBi").value = device.code;
-    document.getElementById("TenThietBi").value = device.name;
-    document.getElementById("LoaiThietBi").value = device.type;
-    document.getElementById("SerialSN").value = device.serial || "";
-    document.getElementById("NgayNhap").value = device.purchaseDate;
-    document.getElementById("Trangthai").value = device.status;
+  currentDeviceId = id;
+  document.getElementById("MaThietBi").value = d.MaThietBi;
+  document.getElementById("TenThietBi").value = d.TenThietBi;
+  document.getElementById("LoaiThietBi").value = d.LoaiThietBi;
+  document.getElementById("SerialSN").value = d.SerialSN || "";
+  document.getElementById("NgayNhap").value = formatDate(d.NgayNhap);
+  document.getElementById("Trangthai").value = d.Trangthai;
+  loadUsersForDeviceSelect(d.Nguoisudung);
 
-    // Load users dropdown
-    const userSelect = document.getElementById("Nguoisudung");
-    userSelect.innerHTML = '<option value="">Không có</option>';
-
-    users.forEach((user) => {
-      const option = document.createElement("option");
-      option.value = user.id;
-      option.textContent = user.name;
-      option.selected = user.id === device.userId;
-      userSelect.appendChild(option);
-    });
-
-    deviceModal.style.display = "flex";
-  }
+  deviceModal.style.display = "flex";
 }
 
 async function saveDevice() {
-  const deviceData = {
-    MaThietBi: document.getElementById("MaThietBi").value,
-    TenThietBi: document.getElementById("TenThietBi").value,
+  const payload = {
+    MaThietBi: document.getElementById("MaThietBi").value.trim(),
+    TenThietBi: document.getElementById("TenThietBi").value.trim(),
     LoaiThietBi: document.getElementById("LoaiThietBi").value,
-    SerialSN: document.getElementById("SerialSN").value,
+    SerialSN: document.getElementById("SerialSN").value.trim(),
     NgayNhap: document.getElementById("NgayNhap").value,
     Trangthai: document.getElementById("Trangthai").value,
     Nguoisudung: document.getElementById("Nguoisudung").value || null,
   };
 
-  try {
-    const method = currentDeviceId ? "PUT" : "POST";
-    const url = currentDeviceId
-      ? `/api/devices/${currentDeviceId}`
-      : "/api/devices";
+  if (!payload.MaThietBi || !payload.TenThietBi) {
+    showAlert("Vui lòng nhập Mã thiết bị và Tên thiết bị", false);
+    return;
+  }
 
-    const response = await fetch(url, {
-      method,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(deviceData),
-    });
+  const url = currentDeviceId
+    ? `/api/devices/${currentDeviceId}`
+    : "/api/devices";
+  const method = currentDeviceId ? "PUT" : "POST";
 
-    if (response.ok) {
-      await loadData();
-      deviceModal.style.display = "none";
-      showAlert("Lưu thiết bị thành công", true);
-    } else {
-      const error = await response.json();
-      throw new Error(error.message || "Lỗi khi lưu thiết bị");
-    }
-  } catch (error) {
-    console.error("Lỗi:", error);
-    showAlert(error.message, false);
+  const ok = await fetchJson(url, {
+    method,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+
+  if (ok !== null) {
+    deviceModal.style.display = "none";
+    await loadDevices();
+    updateStats();
+    showAlert("Lưu thiết bị thành công", true);
   }
 }
-// Add/Edit User
+
+/***********************
+ * CRUD NGƯỜI DÙNG
+ ***********************/
 function addUser() {
   currentUserId = null;
-  userModalTitle.textContent = "Thêm người dùng mới";
   userForm.reset();
-  document.getElementById("userId").value = "";
-
-  // Load available devices dropdown
-  const deviceSelect = document.getElementById("userDevice");
-  deviceSelect.innerHTML = '<option value="">Không có</option>';
-
-  devices
-    .filter((d) => d.status === "inactive")
-    .forEach((device) => {
-      const option = document.createElement("option");
-      option.value = device.id;
-      option.textContent = `${device.name} (${device.code})`;
-      deviceSelect.appendChild(option);
-    });
-
+  loadDevicesForUserSelect();
   userModal.style.display = "flex";
 }
 
 function editUser(id) {
-  currentUserId = parseInt(id);
-  const user = users.find((u) => u.id === currentUserId);
+  const u = users.find((x) => x.MaNV === id);
+  if (!u) return;
 
-  if (user) {
-    userModalTitle.textContent = "Chỉnh sửa người dùng";
-    document.getElementById("userId").value = user.id;
-    document.getElementById("userCode").value = user.code;
-    document.getElementById("userName").value = user.name;
-    document.getElementById("userDepartment").value = user.department;
+  currentUserId = id;
+  document.getElementById("userCode").value = u.MaNV;
+  document.getElementById("userName").value = u.HoVaTen;
+  document.getElementById("userDepartment").value = u.Phongban;
+  loadDevicesForUserSelect(u.Thietbisudung);
+  document.getElementById("assignDate").value = u.Ngaycap || "";
 
-    // Load available devices dropdown
-    const deviceSelect = document.getElementById("userDevice");
-    deviceSelect.innerHTML = '<option value="">Không có</option>';
-
-    devices
-      .filter((d) => d.status === "inactive" || d.id === user.deviceId)
-      .forEach((device) => {
-        const option = document.createElement("option");
-        option.value = device.id;
-        option.textContent = `${device.name} (${device.code})`;
-        option.selected = device.id === user.deviceId;
-        deviceSelect.appendChild(option);
-      });
-
-    document.getElementById("assignDate").value = user.assignDate || "";
-
-    userModal.style.display = "flex";
-  }
+  userModal.style.display = "flex";
 }
 
-function saveUser() {
-  const id = document.getElementById("userId").value;
-  const code = document.getElementById("userCode").value;
-  const name = document.getElementById("userName").value;
-  const department = document.getElementById("userDepartment").value;
-  const deviceId = document.getElementById("userDevice").value || null;
-  const assignDate = document.getElementById("assignDate").value || null;
+async function saveUser() {
+  const payload = {
+    MaNV: document.getElementById("userCode").value.trim(),
+    HoVaTen: document.getElementById("userName").value.trim(),
+    Phongban: document.getElementById("userDepartment").value,
+    Thietbisudung: document.getElementById("userDevice").value || null,
+    Ngaycap: document.getElementById("assignDate").value || null,
+    Trangthai: document.getElementById("userDevice").value
+      ? "Đang sử dụng"
+      : "Chưa cấp",
+  };
 
-  if (!code || !name || !department) {
-    alert("Vui lòng điền đầy đủ thông tin!");
+  if (!payload.MaNV || !payload.HoVaTen) {
+    showAlert("Vui lòng nhập Mã NV và Họ tên", false);
     return;
   }
 
-  if (currentUserId) {
-    // Update existing user
-    const index = users.findIndex((u) => u.id === currentUserId);
-    if (index !== -1) {
-      const oldDeviceId = users[index].deviceId;
+  const url = currentUserId ? `/api/users/${currentUserId}` : "/api/users";
+  const method = currentUserId ? "PUT" : "POST";
 
-      // Update user
-      users[index] = {
-        id: currentUserId,
-        code,
-        name,
-        department,
-        deviceId: deviceId ? parseInt(deviceId) : null,
-        assignDate,
-      };
+  const ok = await fetchJson(url, {
+    method,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
 
-      // Update old device if changed
-      if (oldDeviceId && oldDeviceId !== parseInt(deviceId)) {
-        const oldDeviceIndex = devices.findIndex((d) => d.id === oldDeviceId);
-        if (oldDeviceIndex !== -1) {
-          devices[oldDeviceIndex].userId = null;
-          devices[oldDeviceIndex].status = "inactive";
-        }
-      }
-
-      // Update new device if assigned
-      if (deviceId) {
-        const newDeviceIndex = devices.findIndex(
-          (d) => d.id === parseInt(deviceId)
-        );
-        if (newDeviceIndex !== -1) {
-          devices[newDeviceIndex].userId = currentUserId;
-          devices[newDeviceIndex].status = "active";
-        }
-      }
-    }
-  } else {
-    // Add new user
-    const newId =
-      users.length > 0 ? Math.max(...users.map((u) => u.id)) + 1 : 1;
-    users.push({
-      id: newId,
-      code,
-      name,
-      department,
-      deviceId: deviceId ? parseInt(deviceId) : null,
-      assignDate,
-    });
-
-    // Update device if assigned
-    if (deviceId) {
-      const deviceIndex = devices.findIndex((d) => d.id === parseInt(deviceId));
-      if (deviceIndex !== -1) {
-        devices[deviceIndex].userId = newId;
-        devices[deviceIndex].status = "active";
-      }
-    }
+  if (ok !== null) {
+    userModal.style.display = "none";
+    await loadUsers();
+    updateStats();
+    showAlert("Lưu người dùng thành công", true);
   }
-
-  loadDevices();
-  loadUsers();
-  updateStats();
-  userModal.style.display = "none";
 }
 
-// Delete Confirmation
+/***********************
+ * XOÁ
+ ***********************/
 function confirmDelete(type, id) {
   deleteType = type;
-  deleteId = parseInt(id);
-
-  if (type === "device") {
-    const device = devices.find((d) => d.id === deleteId);
-    deleteMessage.textContent = `Bạn có chắc chắn muốn xóa thiết bị ${device.name} (${device.code})?`;
-  } else {
-    const user = users.find((u) => u.id === deleteId);
-    deleteMessage.textContent = `Bạn có chắc chắn muốn xóa người dùng ${user.name} (${user.code})?`;
-  }
-
+  deleteId = id;
   deleteModal.style.display = "flex";
 }
 
 async function deleteItem() {
-  try {
-    const url =
-      deleteType === "device"
-        ? `/api/devices/${deleteId}`
-        : `/api/users/${deleteId}`;
-
-    const response = await fetch(url, { method: "DELETE" });
-
-    if (response.ok) {
-      await loadData();
-      deleteModal.style.display = "none";
-    }
-  } catch (error) {
-    console.error("Lỗi:", error);
-  }
-}
-// Helper Functions
-function getStatusText(status) {
-  switch (status) {
-    case "Đang sử dụng":
-      return "Đang sử dụng";
-    case "Bảo Hành":
-      return "Bảo Hành";
-    case "Sẵn sàng":
-      return "Sẵn sàng";
-    default:
-      return "Không xác định";
+  const url =
+    deleteType === "device"
+      ? `/api/devices/${deleteId}`
+      : `/api/users/${deleteId}`;
+  const ok = await fetchJson(url, { method: "DELETE" });
+  if (ok !== null) {
+    deleteModal.style.display = "none";
+    await loadAllData();
+    showAlert("Xóa thành công", true);
   }
 }
 
+/***********************
+ * HELPERS
+ ***********************/
 function getStatusClass(status) {
-  switch (status) {
-    case "Đang sử dụng":
-      return "Đang sử dụng";
-    case "Bảo Hành":
-      return "Bảo Hành";
-    case "Sẵn sàng":
-      return "Sẵn sàng";
-    default:
-      return "";
-  }
+  if (status === "Đang sử dụng") return "status-active";
+  if (status === "Bảo Hành") return "status-maintenance";
+  // CSS hiện có: active / maintenance / inactive → map "Sẵn sàng" thành inactive để hiển thị khác màu
+  if (status === "Sẵn sàng") return "status-inactive";
+  return "";
 }
 
-function formatDate(dateString) {
-  if (!dateString) return "-";
-  const date = new Date(dateString);
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
+function percent(part, total) {
+  return total ? Math.round((part / total) * 100) : 0;
 }
 
-// Event Listeners
-loginBtn.addEventListener("click", function () {
-  const username = document.getElementById("username").value;
-  const password = document.getElementById("password").value;
+function formatDate(date) {
+  if (!date) return "-";
+  const d = new Date(date);
+  if (Number.isNaN(d.getTime())) return "-";
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
 
-  if (username && password) {
-    loginPage.style.display = "none";
-    appContainer.style.display = "block";
-    initApp();
-  } else {
-    alert("Vui lòng nhập tài khoản và mật khẩu!");
-  }
+function showAlert(message, isSuccess) {
+  const el = document.createElement("div");
+  el.className = `alert ${isSuccess ? "alert-success" : "alert-danger"}`;
+  el.textContent = message;
+  document.body.appendChild(el);
+  setTimeout(() => {
+    el.classList.add("fade-out");
+    setTimeout(() => el.remove(), 500);
+  }, 3000);
+}
+
+function loadUsersForDeviceSelect(selected = null) {
+  const sel = document.getElementById("Nguoisudung");
+  sel.innerHTML = '<option value="">Không có</option>';
+  users.forEach((u) => {
+    const opt = document.createElement("option");
+    opt.value = u.HoVaTen; // cột Nguoisudung trong THIETBI là NVARCHAR
+    opt.textContent = u.HoVaTen;
+    if (selected && u.HoVaTen === selected) opt.selected = true;
+    sel.appendChild(opt);
+  });
+}
+
+function loadDevicesForUserSelect(selectedId = null) {
+  const sel = document.getElementById("userDevice");
+  sel.innerHTML = '<option value="">Không có</option>';
+  devices
+    .filter((d) => d.Trangthai === "Sẵn sàng" || d.MaThietBi === selectedId)
+    .forEach((d) => {
+      const opt = document.createElement("option");
+      opt.value = d.MaThietBi; // cột Thietbisudung trong NHANVIEN lưu Mã thiết bị
+      opt.textContent = `${d.TenThietBi} (${d.MaThietBi})`;
+      if (selectedId && d.MaThietBi === selectedId) opt.selected = true;
+      sel.appendChild(opt);
+    });
+}
+
+/***********************
+ * SỰ KIỆN
+ ***********************/
+loginBtn.addEventListener("click", () => {
+  const u = document.getElementById("username").value.trim();
+  const p = document.getElementById("password").value.trim();
+  if (!u || !p) return alert("Vui lòng nhập tài khoản và mật khẩu!");
+  loginPage.style.display = "none";
+  appContainer.style.display = "block";
+  loadAllData();
 });
 
-logoutBtn.addEventListener("click", function () {
+logoutBtn.addEventListener("click", () => {
   appContainer.style.display = "none";
   loginPage.style.display = "flex";
-  document.getElementById("username").value = "";
-  document.getElementById("password").value = "";
 });
 
-// Menu Navigation
-menuItems.forEach((item) => {
-  item.addEventListener("click", function (e) {
-    e.preventDefault();
-
-    // Remove active class from all menu items
-    menuItems.forEach((i) => i.classList.remove("active"));
-
-    // Add active class to clicked item
-    this.classList.add("active");
-
-    // Hide all content sections
-    contentSections.forEach((section) => {
-      section.style.display = "none";
-    });
-
-    // Show the selected section
-    const sectionId = this.getAttribute("data-section") + "Section";
-    document.getElementById(sectionId).style.display = "block";
-
-    // Update charts when switching to chart section
-    if (sectionId === "chartSection") {
-      monthlyChart.update();
-      yearlyChart.update();
-    }
-  });
-});
-
-// Device Modal Events
 addDeviceBtn.addEventListener("click", addDevice);
-closeDeviceModal.addEventListener(
-  "click",
-  () => (deviceModal.style.display = "none")
-);
-cancelDeviceBtn.addEventListener(
-  "click",
-  () => (deviceModal.style.display = "none")
-);
-saveDeviceBtn.addEventListener("click", saveDevice);
-
-// User Modal Events
 addUserBtn.addEventListener("click", addUser);
-closeUserModal.addEventListener(
-  "click",
-  () => (userModal.style.display = "none")
-);
-cancelUserBtn.addEventListener(
-  "click",
-  () => (userModal.style.display = "none")
-);
-saveUserBtn.addEventListener("click", saveUser);
 
-// Delete Modal Events
-closeDeleteModal.addEventListener(
-  "click",
-  () => (deleteModal.style.display = "none")
-);
+deviceForm.addEventListener("submit", (e) => {
+  e.preventDefault();
+  saveDevice();
+});
+userForm.addEventListener("submit", (e) => {
+  e.preventDefault();
+  saveUser();
+});
+
+saveDeviceBtn.addEventListener("click", (e) => {
+  e.preventDefault();
+  deviceForm.requestSubmit();
+});
+saveUserBtn.addEventListener("click", (e) => {
+  e.preventDefault();
+  userForm.requestSubmit();
+});
+
+confirmDeleteBtn.addEventListener("click", deleteItem);
 cancelDeleteBtn.addEventListener(
   "click",
   () => (deleteModal.style.display = "none")
 );
-confirmDeleteBtn.addEventListener("click", deleteItem);
+closeDeleteModal.addEventListener(
+  "click",
+  () => (deleteModal.style.display = "none")
+);
 
-// Close modals when clicking outside
+cancelDeviceBtn.addEventListener(
+  "click",
+  () => (deviceModal.style.display = "none")
+);
+closeDeviceModal.addEventListener(
+  "click",
+  () => (deviceModal.style.display = "none")
+);
+
+cancelUserBtn.addEventListener(
+  "click",
+  () => (userModal.style.display = "none")
+);
+closeUserModal.addEventListener(
+  "click",
+  () => (userModal.style.display = "none")
+);
+
+// Đóng modal khi click ra ngoài
 window.addEventListener("click", (e) => {
   if (e.target === deviceModal) deviceModal.style.display = "none";
   if (e.target === userModal) userModal.style.display = "none";
   if (e.target === deleteModal) deleteModal.style.display = "none";
 });
+
+// Menu
+menuItems.forEach((item) => {
+  item.addEventListener("click", (e) => {
+    e.preventDefault();
+    menuItems.forEach((i) => i.classList.remove("active"));
+    item.classList.add("active");
+
+    contentSections.forEach((sec) => (sec.style.display = "none"));
+    const sectionId = item.dataset.section + "Section";
+    document.getElementById(sectionId).style.display = "block";
+
+    if (sectionId === "chartSection") {
+      monthlyChart && monthlyChart.update();
+      yearlyChart && yearlyChart.update();
+    }
+  });
+});
+
+/***********************
+ * KHỞI TẠO NHỎ
+ ***********************/
+(function initSmall() {
+  const y = new Date().getFullYear();
+  const el1 = document.getElementById("currentYear");
+  const el2 = document.getElementById("currentYear2");
+  if (el1) el1.textContent = y;
+  if (el2) el2.textContent = y;
+
+  document.querySelectorAll('input[type="date"]').forEach((inp) => {
+    if (!inp.value) inp.setAttribute("placeholder", "YYYY-MM-DD");
+  });
+})();
