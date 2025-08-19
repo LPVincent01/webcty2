@@ -4,17 +4,22 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Quản Lý Thiết Bị</title>
+
+    <!-- Icons & Chart -->
     <link
       rel="stylesheet"
       href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css"
     />
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <!-- Styles -->
     <link rel="stylesheet" href="./style.css" />
     <base href="/" />
   </head>
   <body>
     <!-- Login Page -->
     <div class="login-container" id="loginPage">
+      <div class="brand-banner">SPRINGTEX</div>
       <div class="login-form">
         <h1>ĐĂNG NHẬP</h1>
         <div class="form-group">
@@ -30,14 +35,18 @@
     </div>
 
     <!-- Main Application -->
-    <div class="app-container" id="appContainer">
+    <div class="app-container" id="appContainer" style="display: none">
       <header class="header">
         <h1>Quản Lý Thiết Bị</h1>
         <div class="user-menu">
           <img
-            src="https://ui-avatars.com/api/?name=Admin&background=3498db&color=fff"
+            id="userAvatar"
+            src="https://ui-avatars.com/api/?name=User&background=3498db&color=fff"
             alt="User Avatar"
           />
+          <span id="currentUserText" class="current-user-text"
+            >Chưa đăng nhập</span
+          >
           <button class="logout-btn" id="logoutBtn">
             <i class="fas fa-sign-out-alt"></i>
             Đăng xuất
@@ -121,6 +130,17 @@
 
               <div class="card">
                 <div class="card-header">
+                  <h3 class="card-title">Hư Hỏng</h3>
+                  <div class="card-icon broken">
+                    <i class="fas fa-triangle-exclamation"></i>
+                  </div>
+                </div>
+                <div class="card-value" id="brokenDevices">0</div>
+                <div class="card-footer" id="brokenPercent">Đang tải...</div>
+              </div>
+
+              <div class="card">
+                <div class="card-header">
                   <h3 class="card-title">Sẵn sàng cấp phát</h3>
                   <div class="card-icon available">
                     <i class="fas fa-box-open"></i>
@@ -155,6 +175,16 @@
                 </div>
               </div>
               <table id="devicesTable">
+                <colgroup>
+                  <col style="width:120px" />
+                  <col style="width:220px" />
+                  <col style="width:140px" />
+                  <col style="width:140px" />
+                  <col style="width:120px" />
+                  <col style="width:130px" />
+                  <col style="width:180px" />
+                  <col style="width:110px" />
+                </colgroup>
                 <thead>
                   <tr>
                     <th>Mã thiết bị</th>
@@ -190,6 +220,15 @@
                 </div>
               </div>
               <table id="usersTable">
+                <colgroup>
+                  <col style="width:110px" />
+                  <col style="width:200px" />
+                  <col style="width:160px" />
+                  <col style="width:160px" />
+                  <col style="width:120px" />
+                  <col style="width:130px" />
+                  <col style="width:110px" />
+                </colgroup>
                 <thead>
                   <tr>
                     <th>Mã NV</th>
@@ -265,6 +304,19 @@
                   0% tổng mua mới
                 </div>
               </div>
+
+              <div class="card">
+                <div class="card-header">
+                  <h3 class="card-title">Hư Hỏng</h3>
+                  <div class="card-icon broken">
+                    <i class="fas fa-triangle-exclamation"></i>
+                  </div>
+                </div>
+                <div class="card-value" id="yearlyBroken">0</div>
+                <div class="card-footer" id="yearlyBrokenPercent">
+                  0% tổng mua mới
+                </div>
+              </div>
             </div>
           </section>
         </main>
@@ -294,11 +346,50 @@
               <select id="LoaiThietBi">
                 <option value="">Chọn loại thiết bị</option>
                 <option value="Laptop">Laptop</option>
-                <option value="Máy bàn">Máy bàn</option>
+                <option value="CPU">CPU</option>
                 <option value="Bàn phím">Bàn phím</option>
                 <option value="Chuột máy tính">Chuột máy tính</option>
+                <option value="Điện Thoại">Điện Thoại</option>
                 <option value="Tablet">Tablet</option>
                 <option value="Màn hình">Màn hình</option>
+                <option value="Bàn Làm Việc">Bàn Làm Việc</option>
+                <option value="Ghế Văn Phòng">Ghế Văn Phòng</option>
+                <option value="Tủ Lạnh">Tủ Lạnh</option>
+                <option value="Két Sắt">Két Sắt</option>
+                <option value="Kệ">Kệ</option>
+                <option value="Tủ Hồ Sơ">Tủ Hồ Sơ</option>
+                <option value="Máy Móc">Máy Móc</option>
+                <option value="Máy Lạnh">Máy Lạnh</option>
+                <option value="Máy Quét Thẻ">Máy Quét Thẻ</option>
+                <option value="Nồi Hơi">Nồi Hơi</option>
+                <option value="Máy Nén Khí">Máy Nén Khí</option>
+                <option value="Tời Nâng Hàng">Tời Nâng Hàng</option>
+                <option value="Xe Nâng">Xe Nâng</option>
+                <option value="Hệ Thống Thu Lôi">Hệ Thống Thu Lôi</option>
+                <option value="Tủ Điện">Tủ Điện</option>
+                <option value="Bình Chữa Cháy">Bình Chữa Cháy</option>
+                <option value="Máy Lọc Nước">Máy Lọc Nước</option>
+                <option value="Hệ Thống Xử Lý Nước Thải">
+                  Hệ Thống Xử Lý Nước Thải
+                </option>
+                <option value="Quạt">Quạt</option>
+                <option value="Bàn Kiểm Hàng">Bàn Kiểm Hàng</option>
+                <option value="Bàn Ủi">Bàn Ủi</option>
+                <option value="TiVi">TiVi</option>
+                <option value="CAMERA">CAMERA</option>
+                <option value="Máy In">Máy In</option>
+                <option value="Máy Kiểm Vải">Máy Kiểm Vải</option>
+                <option value="Máy Giặt">Máy Giặt</option>
+                <option value="Máy Sấy">Máy Sấy</option>
+                <option value="NANO CANH">NANO CANH</option>
+                <option value="Máy In Rập">Máy In Rập</option>
+                <option value="Máy In Sơ Đồ">Máy In Sơ Đồ</option>
+                <option value="Máy Trải Vải Tự Động">
+                  Máy Trải Vải Tự Động
+                </option>
+                <option value="Máy Soi Vải">Máy Soi Vải</option>
+                <option value="Máy May 1 Kim">Máy May 1 Kim</option>
+                <option value="Máy Cắt Tay">Máy Cắt Tay</option>
                 <option value="Khác">Khác</option>
               </select>
             </div>
@@ -317,6 +408,8 @@
                 <option value="Đang sử dụng">Đang sử dụng</option>
                 <option value="Bảo Hành">Bảo Hành</option>
                 <option value="Sẵn sàng">Sẵn sàng</option>
+                <option value="Hư Hỏng">Hư Hỏng</option>
+                <!-- mới thêm -->
               </select>
             </div>
             <div class="form-row">
@@ -357,13 +450,21 @@
               <label for="userDepartment">Phòng ban</label>
               <select id="userDepartment" required>
                 <option value="">Chọn phòng ban</option>
-                <option value="Kế toán">Kế toán</option>
-                <option value="Nhân sự">Nhân sự</option>
+                <option value="Tổ Cắt">Tổ Cắt</option>
+                <option value="Phòng Mẫu">Phòng Mẫu</option>
+                <option value="Chuyền May">Chuyền May</option>
+                <option value="Hoàn Thành">Hoàn Thành</option>
+                <option value="Kỹ Thuật-Bảo Trì">Kỹ Thuật-Bảo Trì</option>
+                <option value="IE">IE</option>
+                <option value="QC">QC</option>
+                <option value="Kho Vải">Kho Vải</option>
+                <option value="Kho Phụ Liệu">Kho Phụ Liệu</option>
+                <option value="Kho Thành Phẩm">Kho Thành Phẩm</option>
+                <option value="Hành Chính">Hành Chính</option>
+                <option value="Văn Phòng Sản Xuất">Văn Phòng Sản Xuất</option>
+                <option value="Văn Phòng Kho">Văn Phòng Kho</option>
                 <option value="Theo đơn">Theo đơn</option>
-                <option value="IT">IT</option>
-                <option value="Xuất nhập khẩu">Xuất nhập khẩu</option>
                 <option value="Khác">Khác</option>
-                <option value="Kho">Kho</option>
               </select>
             </div>
             <div class="form-row">
@@ -375,12 +476,7 @@
             </div>
             <div class="form-row">
               <label for="assignDate">Ngày cấp (nếu có)</label>
-              <input
-                type="date"
-                id="assignDate"
-                pattern="\d{4}-\d{2}-\d{2}"
-                placeholder="YYYY-MM-DD"
-              />
+              <input type="date" id="assignDate" placeholder="YYYY-MM-DD" />
             </div>
           </form>
         </div>
@@ -409,6 +505,8 @@
         </div>
       </div>
     </div>
+
+    <!-- Scripts -->
     <script src="./script.js"></script>
   </body>
 </html>

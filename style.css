@@ -7,11 +7,14 @@
   --dark-color: #2c3e50;
   --light-color: #ecf0f1;
 
-  --success-color: #2ecc71;
+  --success-color: #2ecc71; /* Đang sử dụng (icon users) */
   --success-hover: #27ae60;
 
-  --warning-color: #f39c12;
-  --danger-color: #e74c3c;
+  --warning-color: #f39c12; /* Bảo Hành (icon maintenance) */
+  --info-color: #1abc9c; /* Sẵn sàng (icon available) */
+  --info-hover: #16a085;
+
+  --danger-color: #e74c3c; /* Hư Hỏng (icon broken) */
   --danger-hover: #c0392b;
 
   --text-dark: #333;
@@ -38,11 +41,37 @@ body {
   justify-content: center;
   align-items: center;
   height: 100vh;
-  background: linear-gradient(
-    135deg,
-    var(--primary-color),
-    var(--primary-hover)
-  );
+  position: relative;
+  background: #000
+    url("https://images.unsplash.com/photo-1444703686981-a3abbc4d4fe3?q=80&w=1600&auto=format&fit=crop")
+    center/cover no-repeat fixed;
+}
+/* lớp phủ làm tối nền để chữ và form nổi bật hơn */
+.login-container::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+}
+/* chữ SPRINGTEX nổi bật */
+.brand-banner {
+  position: absolute;
+  top: 8%;
+  left: 0;
+  width: 100%;
+  text-align: center;
+  font-weight: 800;
+  font-size: clamp(28px, 5vw, 56px);
+  color: #fff;
+  letter-spacing: 4px;
+  text-shadow: 0 4px 16px rgba(0, 0, 0, 0.6), 0 0 24px rgba(37, 99, 235, 0.6);
+  z-index: 1;
+}
+/* đảm bảo form đứng trên overlay và nền */
+.login-form {
+  position: relative;
+  z-index: 2;
 }
 
 .login-form {
@@ -125,13 +154,11 @@ input[type="date"]:valid::before {
   align-items: center;
   gap: 1rem;
 }
-
 .user-menu img {
   width: 40px;
   height: 40px;
   border-radius: 50%;
 }
-
 .logout-btn {
   background: none;
   border: none;
@@ -139,6 +166,7 @@ input[type="date"]:valid::before {
   cursor: pointer;
   display: flex;
   gap: 0.5rem;
+  align-items: center;
 }
 
 /* ========================
@@ -155,7 +183,6 @@ input[type="date"]:valid::before {
   padding: 1.5rem 0;
   box-shadow: 2px 0 5px rgba(0, 0, 0, 0.1);
 }
-
 .sidebar-menu {
   list-style: none;
 }
@@ -223,18 +250,24 @@ input[type="date"]:valid::before {
   justify-content: center;
   color: white;
 }
+
+/* Card icon colors */
 .card-icon.devices {
   background: var(--primary-color);
-}
+} /* Tổng số */
 .card-icon.users {
   background: var(--success-color);
-}
+} /* Đang sử dụng */
 .card-icon.maintenance {
   background: var(--warning-color);
-}
+} /* Bảo Hành */
 .card-icon.available {
+  background: var(--info-color);
+} /* Sẵn sàng */
+.card-icon.broken {
   background: var(--danger-color);
-}
+} /* Hư Hỏng */
+
 .card-value {
   font-size: 2rem;
   font-weight: 700;
@@ -281,6 +314,100 @@ table {
   width: 100%;
   border-collapse: collapse;
 }
+
+/* Column alignment for devices/users tables */
+#devicesTable,
+#usersTable {
+  table-layout: fixed;
+}
+#devicesTable th,
+#devicesTable td,
+#usersTable th,
+#usersTable td {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+}
+/* Ensure cell width includes padding/border to align with colgroup */
+table th,
+table td {
+  box-sizing: border-box;
+}
+
+/* Force consistent text alignment between headers and cells */
+#devicesTable th,
+#usersTable th {
+  text-align: left;
+}
+#devicesTable td,
+#usersTable td {
+  text-align: left;
+}
+
+/* Devices table columns */
+#devicesTable th:nth-child(1),
+#devicesTable td:nth-child(1) {
+  width: 120px;
+}
+#devicesTable th:nth-child(2),
+#devicesTable td:nth-child(2) {
+  width: 220px;
+}
+#devicesTable th:nth-child(3),
+#devicesTable td:nth-child(3) {
+  width: 140px;
+}
+#devicesTable th:nth-child(4),
+#devicesTable td:nth-child(4) {
+  width: 140px;
+}
+#devicesTable th:nth-child(5),
+#devicesTable td:nth-child(5) {
+  width: 120px;
+}
+#devicesTable th:nth-child(6),
+#devicesTable td:nth-child(6) {
+  width: 130px;
+}
+#devicesTable th:nth-child(7),
+#devicesTable td:nth-child(7) {
+  width: 180px;
+}
+#devicesTable th:nth-child(8),
+#devicesTable td:nth-child(8) {
+  width: 110px;
+}
+
+/* Users table columns */
+#usersTable th:nth-child(1),
+#usersTable td:nth-child(1) {
+  width: 110px;
+}
+#usersTable th:nth-child(2),
+#usersTable td:nth-child(2) {
+  width: 200px;
+}
+#usersTable th:nth-child(3),
+#usersTable td:nth-child(3) {
+  width: 160px;
+}
+#usersTable th:nth-child(4),
+#usersTable td:nth-child(4) {
+  width: 160px;
+}
+#usersTable th:nth-child(5),
+#usersTable td:nth-child(5) {
+  width: 120px;
+}
+#usersTable th:nth-child(6),
+#usersTable td:nth-child(6) {
+  width: 130px;
+}
+#usersTable th:nth-child(7),
+#usersTable td:nth-child(7) {
+  width: 110px;
+}
 th,
 td {
   padding: 1rem;
@@ -293,6 +420,8 @@ th {
 tr:hover {
   background: #f9f9f9;
 }
+
+/* Status badges (hiển thị trong bảng) */
 .status-badge {
   padding: 0.25rem 0.75rem;
   border-radius: 20px;
@@ -301,15 +430,26 @@ tr:hover {
 }
 .status-active {
   background: #d4edda;
-  color: #155724;
+  color: #155724; /* xanh lá nhạt */
 }
 .status-maintenance {
   background: #fff3cd;
-  color: #856404;
+  color: #856404; /* vàng nhạt */
 }
 .status-available {
+  background: #d1f2eb;
+  color: #0e6251; /* xanh ngọc nhạt (đổi để phân biệt với Hư Hỏng) */
+}
+.status-broken {
   background: #f8d7da;
-  color: #721c24;
+  color: #721c24; /* đỏ nhạt (Hư Hỏng) */
+}
+
+.assigned-device {
+  background-color: #f8f9fa;
+}
+.assigned-device td {
+  opacity: 0.8;
 }
 
 .action-btns {
@@ -369,6 +509,9 @@ tr:hover {
   border-radius: 8px;
   max-width: 500px;
   width: 100%;
+  max-height: 90vh; /* đảm bảo modal không vượt quá chiều cao màn hình */
+  display: flex;
+  flex-direction: column; /* header/body/footer xếp theo cột */
   overflow: hidden;
 }
 .modal-header,
@@ -386,6 +529,8 @@ tr:hover {
 }
 .modal-body {
   padding: 1.5rem;
+  overflow: auto; /* nội dung cuộn trong body */
+  flex: 1 1 auto; /* chiếm phần còn lại giữa header và footer */
 }
 .modal-close {
   background: none;

@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Thông tin thiết bị</title>
+    <link rel="stylesheet" href="./style.css" />
+    <style>
+      /* Phòng khi thiếu vài style ở project chính */
+      :root {
+        --c-border: #e5e7eb; /* gray-200 */
+        --c-bg: #ffffff;
+        --c-key: #0f172a; /* slate-900 */
+        --c-val: #1f2937; /* gray-800 */
+        --c-accent: #2563eb; /* blue-600 */
+        --c-row: #f8fafc; /* slate-50 */
+        --c-row-alt: #f1f5f9; /* slate-100 */
+      }
+      body {
+        background: #f6f7fb;
+      }
+      .container {
+        max-width: 720px;
+        margin: 32px auto;
+        padding: 0 16px;
+      }
+      h1 {
+        color: var(--c-accent);
+        margin-bottom: 12px;
+      }
+      .card {
+        border: 1px solid var(--c-border);
+        border-radius: 10px;
+        padding: 16px;
+        background: var(--c-bg);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04);
+      }
+      .row {
+        display: flex;
+        gap: 12px;
+        margin-top: 16px;
+      }
+      .btn {
+        padding: 0.5rem 1rem;
+        border-radius: 6px;
+        border: 1px solid #111;
+        background: #111;
+        color: #fff;
+        text-decoration: none;
+      }
+      .btn.outline {
+        background: #fff;
+        color: #111;
+      }
+      .muted {
+        color: #64748b; /* slate-500 */
+        font-size: 0.95rem;
+      }
+      .center {
+        display: grid;
+        place-items: center;
+        min-height: 120px;
+      }
+      .error {
+        color: #b91c1c;
+      }
+
+      /* Danh sách key:value */
+      .kv-list {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        margin-top: 8px;
+      }
+      .kv {
+        display: grid;
+        grid-template-columns: 180px 1fr;
+        gap: 10px;
+        align-items: center;
+        border: 1px solid var(--c-border);
+        border-radius: 8px;
+        padding: 10px 12px;
+        background: var(--c-row);
+      }
+      .kv:nth-child(2n) {
+        background: var(--c-row-alt);
+      }
+      .kv .k {
+        color: var(--c-key);
+        font-weight: 600;
+        position: relative;
+      }
+      .kv .k::after {
+        content: ":";
+        position: relative;
+        margin-left: 2px;
+        color: var(--c-key);
+        font-weight: 600;
+      }
+      .kv .v {
+        color: var(--c-val);
+      }
+      @media (max-width: 480px) {
+        .kv {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="container">
+      <h1>Thông tin thiết bị</h1>
+
+      <div id="status" class="muted">Đang tải...</div>
+      <div id="content" class="card" style="display: none"></div>
+
+      <div class="row">
+        <a class="btn outline" href="./">Về trang chính</a>
+      </div>
+    </main>
+
+    <script>
+      function render(obj) {
+        const content = document.getElementById("content");
+        if (!obj) {
+          content.innerHTML =
+            '<div class="error">Không có dữ liệu để hiển thị.</div>';
+          content.style.display = "block";
+          return;
+        }
+
+        // Chuẩn hoá ngày nếu có trường NgayNhap
+        if (obj.NgayNhap) {
+          const d = new Date(obj.NgayNhap);
+          if (!Number.isNaN(d)) {
+            const yyyy = d.getFullYear();
+            const mm = String(d.getMonth() + 1).padStart(2, "0");
+            const dd = String(d.getDate()).padStart(2, "0");
+            obj.NgayNhap = `${yyyy}-${mm}-${dd}`;
+          }
+        }
+
+        // Loại bỏ 3 trường không muốn hiển thị
+        const hiddenKeys = new Set(["LastUserName", "LastUserId", "LastAssignedDate"]);
+        const rows = Object.entries(obj)
+          .filter(([k]) => !hiddenKeys.has(k))
+          .map(
+            ([k, v]) => `
+        <div class="kv">
+          <span class="k">${k}</span>
+          <span class="v">${
+            v === null || v === undefined ? "" : String(v)
+          }</span>
+        </div>
+      `
+          )
+          .join("");
+        content.innerHTML = `<div class="kv-list">${rows}</div>`;
+        content.style.display = "block";
+      }
+
+      async function main() {
+        const status = document.getElementById("status");
+        const p = new URLSearchParams(location.search);
+        const raw = p.get("data");
+        const id = p.get("id");
+
+        // 1) Trường hợp QR chứa sẵn JSON (?data=...)
+        if (raw) {
+          try {
+            const obj = JSON.parse(decodeURIComponent(raw));
+            status.style.display = "none";
+            render(obj);
+            return;
+          } catch (e) {
+            status.innerHTML =
+              '<span class="error">Dữ liệu QR không hợp lệ.</span>';
+            return;
+          }
+        }
+
+        // 2) Trường hợp QR chỉ chứa ID (?id=...)
+        if (id) {
+          try {
+            const res = await fetch(
+              `/public/devices/${encodeURIComponent(id)}`
+            );
+            if (!res.ok) {
+              status.innerHTML =
+                '<span class="error">Không tìm thấy thiết bị.</span>';
+              return;
+            }
+            const obj = await res.json();
+            status.style.display = "none";
+            render(obj);
+            return;
+          } catch (e) {
+            status.innerHTML =
+              '<span class="error">Không thể kết nối máy chủ.</span>';
+            return;
+          }
+        }
+
+        status.innerHTML =
+          '<span class="error">Thiếu tham số trên URL. Hãy mở trang qua QR hợp lệ.</span>';
+      }
+      main();
+    </script>
+  </body>
+</html>
