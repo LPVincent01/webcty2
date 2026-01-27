@@ -5,6 +5,7 @@ const sql = require("mssql");
 const multer = require("multer");
 const cors = require("cors");
 const path = require("path");
+const bcrypt = require("bcryptjs");
 
 const app = express();
 const PORT = 3000;
@@ -12,10 +13,10 @@ const HOST = "0.0.0.0"; // Cho phép truy cập từ tất cả IP trong LAN
 
 /* ========= CẤU HÌNH SQL SERVER ========= */
 const config = {
-  user: "sa",
-  password: "Abc@123456!",
-  server: "LAPTOP-M8N7CHUK",
-  database: "QuanLyThietBi",
+  user: process.env.DB_USER || "sa",
+  password: process.env.DB_PASSWORD || "Abc@123456!",
+  server: process.env.DB_SERVER || "LAPTOP-M8N7CHUK",
+  database: process.env.DB_NAME || "QuanLyThietBi",
   options: {
     encrypt: false,
     trustServerCertificate: true,
@@ -66,26 +67,235 @@ app.get("/", (_req, res) => res.sendFile(path.join(__dirname, "index.html")));
 app.get("/health", (_req, res) => res.json({ ok: true }));
 
 /* ====== AUTH (ĐĂNG NHẬP + PHÂN QUYỀN) ====== */
-const USERS = [
-  { username: "admin", password: "admin123", role: "admin" },
-  { username: "user", password: "user123", role: "user" },
-];
+// const USERS = []; // Đã bỏ user cứng
 const TOKENS = new Map(); // token -> { username, role }
+const TOKEN_TTL = 24 * 60 * 60 * 1000; // 24 giờ
+
+// Dọn dẹp token hết hạn mỗi giờ
+setInterval(
+  () => {
+    const now = Date.now();
+    for (const [token, session] of TOKENS.entries()) {
+      if (session.expiresAt < now) {
+        TOKENS.delete(token);
+      }
+    }
+    console.log(
+      `[CLEANUP] Đã dọn dẹp token. Số lượng hiện tại: ${TOKENS.size}`,
+    );
+  },
+  60 * 60 * 1000,
+);
 
 function makeToken() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
 
-app.post("/api/login", (req, res) => {
+// API Đăng nhập (Dùng Database)
+app.post("/api/login", async (req, res) => {
   const { username, password } = req.body || {};
-  const u = USERS.find(
-    (x) => x.username === username && x.password === password,
-  );
-  if (!u) return res.status(401).send("Sai tài khoản hoặc mật khẩu");
-  const token = makeToken();
-  TOKENS.set(token, { username: u.username, role: u.role });
-  return res.json({ token, role: u.role, username: u.username });
+  if (!username || !password)
+    return res.status(400).send("Thiếu thông tin đăng nhập");
+
+  try {
+    const pool = await poolPromise;
+    // 1. Tìm user trong DB (Bảng TAIKHOAN)
+    const result = await pool
+      .request()
+      .input("Username", sql.VarChar, username)
+      .query("SELECT * FROM dbo.TAIKHOAN WHERE Username = @Username");
+
+    const user = result.recordset[0];
+
+    // 2. Nếu không có user
+    if (!user) return res.status(401).send("Sai tài khoản hoặc mật khẩu");
+
+    // 3. So sánh mật khẩu
+    let isMatch = false;
+
+    // Kiểm tra xem mật khẩu có phải là hash bcrypt không (bắt đầu bằng $2a, $2b hoặc $2y)
+    // Tài khoản cũ lưu plain text sẽ không bắt đầu bằng $2
+    if (!user.PasswordHash.startsWith("$2")) {
+      // So sánh thường (cho user cũ hoặc admin chưa hash)
+      isMatch = password === user.PasswordHash;
+    } else {
+      // So sánh bằng thư viện bcrypt
+      isMatch = await bcrypt.compare(password, user.PasswordHash);
+    }
+
+    if (!isMatch) return res.status(401).send("Sai tài khoản hoặc mật khẩu");
+
+    // 4. Tạo token
+    const token = makeToken();
+    TOKENS.set(token, {
+      username: user.Username,
+      role: user.Role,
+      displayName: user.DisplayName, // Lưu thêm tên hiển thị
+      expiresAt: Date.now() + TOKEN_TTL,
+    });
+    return res.json({
+      token,
+      role: user.Role,
+      username: user.Username,
+      displayName: user.DisplayName,
+    });
+  } catch (err) {
+    handleSqlError(res, err);
+  }
 });
+
+// --- API QUẢN LÝ TÀI KHOẢN (Admin Only) ---
+
+// Lấy danh sách
+app.get("/api/accounts", authenticate, authorizeAdmin, async (req, res) => {
+  try {
+    const pool = await poolPromise;
+    const result = await pool
+      .request()
+      .query("SELECT Username, Role, DisplayName, CreatedAt FROM dbo.TAIKHOAN");
+    res.json(result.recordset);
+  } catch (err) {
+    handleSqlError(res, err);
+  }
+});
+
+// Tạo tài khoản mới
+app.post("/api/accounts", authenticate, authorizeAdmin, async (req, res) => {
+  const { username, password, role, displayName } = req.body;
+  if (!username || !password) return res.status(400).send("Thiếu user/pass");
+
+  try {
+    const salt = await bcrypt.genSalt(10);
+    const hash = await bcrypt.hash(password, salt);
+    const pool = await poolPromise;
+    await pool
+      .request()
+      .input("Username", sql.VarChar, username)
+      .input("PasswordHash", sql.VarChar, hash)
+      .input("Role", sql.VarChar, role || "user")
+      .input("DisplayName", sql.NVarChar, displayName || username)
+      .query(
+        `INSERT INTO dbo.TAIKHOAN (Username, PasswordHash, Role, DisplayName) VALUES (@Username, @PasswordHash, @Role, @DisplayName)`,
+      );
+    res.status(201).send("Tạo tài khoản thành công");
+  } catch (err) {
+    handleSqlError(res, err);
+  }
+});
+
+// Xóa tài khoản
+app.delete(
+  "/api/accounts/:username",
+  authenticate,
+  authorizeAdmin,
+  async (req, res) => {
+    if (req.params.username === "admin")
+      return res.status(400).send("Không thể xóa Super Admin");
+    try {
+      const pool = await poolPromise;
+      await pool
+        .request()
+        .input("Username", sql.VarChar, req.params.username)
+        .query("DELETE FROM dbo.TAIKHOAN WHERE Username = @Username");
+      res.send("Xóa tài khoản thành công");
+    } catch (err) {
+      handleSqlError(res, err);
+    }
+  },
+);
+
+/* --- BẮT ĐẦU ĐOẠN CODE API QUẢN LÝ TÀI KHOẢN (THÊM VÀO ĐÂY) --- */
+
+// 1. Lấy danh sách tài khoản
+app.get("/api/accounts", authenticate, authorizeAdmin, async (req, res) => {
+  try {
+    const pool = await poolPromise;
+    // Lấy tất cả trừ password hash
+    const result = await pool
+      .request()
+      .query(
+        "SELECT Username, Role, DisplayName, CreatedAt FROM dbo.TAIKHOAN ORDER BY CreatedAt DESC",
+      );
+    res.json(result.recordset);
+  } catch (err) {
+    handleSqlError(res, err);
+  }
+});
+
+// 2. Tạo tài khoản mới (Có mã hóa mật khẩu)
+app.post("/api/accounts", authenticate, authorizeAdmin, async (req, res) => {
+  const { username, password, role, displayName } = req.body;
+
+  if (!username || !password) {
+    return res.status(400).send("Thiếu tên đăng nhập hoặc mật khẩu");
+  }
+
+  try {
+    const pool = await poolPromise;
+
+    // Kiểm tra trùng username
+    const check = await pool
+      .request()
+      .input("Username", sql.VarChar, username)
+      .query("SELECT 1 FROM dbo.TAIKHOAN WHERE Username = @Username");
+
+    if (check.recordset.length > 0) {
+      return res.status(409).send("Tên đăng nhập đã tồn tại!");
+    }
+
+    // Mã hóa mật khẩu (nếu đã cài bcryptjs, nếu chưa thì lưu thô tạm thời)
+    let passwordToSave = password;
+    try {
+      const bcrypt = require("bcryptjs"); // Đảm bảo bạn đã chạy: npm install bcryptjs
+      const salt = await bcrypt.genSalt(10);
+      passwordToSave = await bcrypt.hash(password, salt);
+    } catch (e) {
+      console.warn("Chưa cài bcryptjs, lưu mật khẩu dạng thô.");
+    }
+
+    await pool
+      .request()
+      .input("Username", sql.VarChar, username)
+      .input("PasswordHash", sql.VarChar, passwordToSave)
+      .input("Role", sql.VarChar, role || "user") // Lưu quyền hạn (admin/user)
+      .input("DisplayName", sql.NVarChar, displayName || username).query(`
+        INSERT INTO dbo.TAIKHOAN (Username, PasswordHash, Role, DisplayName)
+        VALUES (@Username, @PasswordHash, @Role, @DisplayName)
+      `);
+
+    res.status(201).send("Tạo tài khoản thành công");
+  } catch (err) {
+    handleSqlError(res, err);
+  }
+});
+
+// 3. Xóa tài khoản
+app.delete(
+  "/api/accounts/:username",
+  authenticate,
+  authorizeAdmin,
+  async (req, res) => {
+    const targetUser = req.params.username;
+
+    // Bảo vệ tài khoản admin gốc
+    if (targetUser === "admin") {
+      return res.status(400).send("Không thể xóa tài khoản Super Admin này!");
+    }
+
+    try {
+      const pool = await poolPromise;
+      await pool
+        .request()
+        .input("Username", sql.VarChar, targetUser)
+        .query("DELETE FROM dbo.TAIKHOAN WHERE Username = @Username");
+      res.send("Xóa tài khoản thành công");
+    } catch (err) {
+      handleSqlError(res, err);
+    }
+  },
+);
+
+/* --- KẾT THÚC ĐOẠN CODE API QUẢN LÝ TÀI KHOẢN --- */
 
 function authenticate(req, res, next) {
   const auth = req.headers["authorization"] || "";
@@ -113,6 +323,12 @@ function authenticate(req, res, next) {
   if (!session) {
     console.warn("[AUTH] Token không hợp lệ:", token);
     return res.status(401).send("Token không hợp lệ");
+  }
+
+  if (session.expiresAt < Date.now()) {
+    TOKENS.delete(token);
+    console.warn("[AUTH] Token đã hết hạn");
+    return res.status(401).send("Phiên đăng nhập hết hạn");
   }
 
   req.user = session;

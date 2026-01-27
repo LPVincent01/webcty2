@@ -154,6 +154,17 @@ importDevicesExcelInput.addEventListener("change", async (event) => {
     const sheet = workbook.Sheets[sheetName];
     const raw = XLSX.utils.sheet_to_json(sheet, { defval: "" });
 
+    // TỐI ƯU: Tạo map tra cứu loại thiết bị 1 lần duy nhất (O(1) lookup)
+    const deviceTypeLookup = new Map();
+    for (const cat in deviceTypes) {
+      for (const v of Object.values(deviceTypes[cat] || {})) {
+        const normV = normalizeLoaiThietBi(v);
+        if (normV) {
+          deviceTypeLookup.set(normalizeLoaiThietBiCompact(normV), v);
+        }
+      }
+    }
+
     const json = raw.map((row) => {
       const parsed = {
         ...row,
@@ -232,21 +243,9 @@ importDevicesExcelInput.addEventListener("change", async (event) => {
       let mappedType = "";
       if (typeNorm) {
         const compactNeedle = normalizeLoaiThietBiCompact(typeNorm);
-
-        outer: for (const cat in deviceTypes) {
-          for (const v of Object.values(deviceTypes[cat] || {})) {
-            const cand = normalizeLoaiThietBi(v);
-            if (!cand) continue;
-
-            if (cand === typeNorm) {
-              mappedType = v;
-              break outer;
-            }
-            if (normalizeLoaiThietBiCompact(cand) === compactNeedle) {
-              mappedType = v;
-              break outer;
-            }
-          }
+        // Tra cứu nhanh từ Map đã tạo
+        if (deviceTypeLookup.has(compactNeedle)) {
+          mappedType = deviceTypeLookup.get(compactNeedle);
         }
       }
 
@@ -1934,6 +1933,10 @@ loginBtn.addEventListener("click", async () => {
   loginPage.style.display = "none";
   appContainer.style.display = "block";
 
+  // Kiểm tra quyền để hiện menu Account
+  document.getElementById("menuAccountManagement").style.display =
+    window.currentRole === "admin" ? "block" : "none";
+
   // Tải dữ liệu và cập nhật UI sau khi đã có token
   await loadAllData();
   applyTranslations(currentLang); // Áp dụng bản dịch sau khi có dữ liệu để các biểu đồ cũng được dịch
@@ -1941,11 +1944,19 @@ loginBtn.addEventListener("click", async () => {
   // Chuyển sang tab Biểu đồ thống kê và cập nhật biểu đồ
   const chartsLink = document.querySelector('a[data-section="chart"]');
   if (chartsLink) {
-    // Vô hiệu hóa các nút "Thêm" nếu không phải admin
-    if (window.currentRole !== "admin") {
-      addDeviceBtn.disabled = true;
-      addUserBtn.disabled = true;
-      addPurchaseBtn.disabled = true;
+    // 1. Mở lại các nút trước (đề phòng bị disable từ lần đăng nhập trước)
+    if (addDeviceBtn) addDeviceBtn.disabled = false;
+    if (addUserBtn) addUserBtn.disabled = false;
+    if (addPurchaseBtn) addPurchaseBtn.disabled = false;
+
+    // 2. Chuẩn hóa role (về chữ thường và xóa khoảng trắng thừa) để so sánh
+    const safeRole = (window.currentRole || "").trim().toLowerCase();
+
+    // 3. Nếu KHÔNG phải admin thì mới khóa nút
+    if (safeRole !== "admin" && safeRole !== "user") {
+      if (addDeviceBtn) addDeviceBtn.disabled = true;
+      if (addUserBtn) addUserBtn.disabled = true;
+      if (addPurchaseBtn) addPurchaseBtn.disabled = true;
     }
     chartsLink.click();
     if (yearlyChartYearSelector) {
@@ -2167,6 +2178,9 @@ menuItems.forEach((item) => {
     if (sectionId === "chartSection") {
       const y = parseInt(yearlyChartYearSelector?.value) || 2025;
       setTimeout(() => updateChartSection(y), 0);
+    }
+    if (sectionId === "accountsSection") {
+      loadAccounts();
     }
   });
 });
@@ -2940,3 +2954,131 @@ if (addPurchaseBtn) {
     }
   });
 }
+
+/* =========================================
+   LOGIC QUẢN LÝ TÀI KHOẢN (THÊM VÀO CUỐI FILE)
+   ========================================= */
+
+// 1. Hàm mở Modal thêm tài khoản
+function openAddAccountModal() {
+  const modal = document.getElementById("accountModal");
+  const form = document.getElementById("accountForm");
+  if (modal) {
+    modal.style.display = "flex";
+    if (form) form.reset(); // Xóa trắng form cũ
+  }
+}
+
+// 2. Hàm đóng Modal
+function closeAccountModal() {
+  const modal = document.getElementById("accountModal");
+  if (modal) modal.style.display = "none";
+}
+
+// 3. Xử lý sự kiện khi bấm nút "Tạo tài khoản" (Submit Form)
+const accountFormElement = document.getElementById("accountForm");
+if (accountFormElement) {
+  accountFormElement.addEventListener("submit", async (e) => {
+    e.preventDefault(); // Chặn load lại trang
+
+    // Lấy dữ liệu từ các ô input
+    const payload = {
+      username: document.getElementById("accUsername").value.trim(),
+      password: document.getElementById("accPassword").value,
+      displayName: document.getElementById("accDisplayName").value.trim(),
+      role: document.getElementById("accRole").value, // Lấy quyền (admin/user)
+    };
+
+    // Kiểm tra sơ bộ
+    if (payload.username.length < 3) {
+      return showAlert("Tên đăng nhập quá ngắn!", false);
+    }
+
+    // Gửi về Server
+    const res = await fetchJson("/api/accounts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    if (res) {
+      showAlert("Tạo tài khoản thành công ✔️", true);
+      closeAccountModal();
+      loadAccounts(); // Tải lại bảng danh sách
+    }
+  });
+}
+
+// 4. Hàm tải danh sách tài khoản từ Server
+async function loadAccounts() {
+  // Chỉ admin mới được tải
+  if (window.currentRole !== "admin") return;
+
+  const data = await fetchJson("/api/accounts");
+  if (!data) return;
+
+  const tbody = document.getElementById("accountsTableBody");
+  if (!tbody) return;
+
+  tbody.innerHTML = ""; // Xóa cũ
+
+  data.forEach((acc) => {
+    // Format ngày tạo
+    const dateStr = acc.CreatedAt
+      ? new Date(acc.CreatedAt).toLocaleDateString("vi-VN")
+      : "-";
+
+    // Logic nút xóa: Không cho xóa chính mình và admin gốc
+    const isMe = acc.Username === window.currentUsername;
+    const isSuperAdmin = acc.Username === "admin";
+
+    let deleteBtn = "";
+    if (!isMe && !isSuperAdmin) {
+      deleteBtn = `<button class="btn btn-danger btn-sm" onclick="deleteAccount('${acc.Username}')" title="Xóa"><i class="fas fa-trash"></i></button>`;
+    }
+
+    // Badge quyền hạn đẹp mắt
+    let roleBadge =
+      acc.Role === "admin"
+        ? '<span class="status-badge status-broken">Admin</span>'
+        : '<span class="status-badge status-available">User</span>';
+
+    tbody.innerHTML += `
+      <tr>
+        <td>${acc.Username}</td>
+        <td>${acc.DisplayName || ""}</td>
+        <td style="text-align:center">${roleBadge}</td>
+        <td style="text-align:center">${dateStr}</td>
+        <td style="text-align:center">
+            <div class="action-btns" style="justify-content:center">
+                ${deleteBtn}
+            </div>
+        </td>
+      </tr>
+    `;
+  });
+}
+
+// 5. Hàm xóa tài khoản
+async function deleteAccount(username) {
+  if (
+    !confirm(
+      `Bạn có chắc muốn xóa tài khoản [${username}]? Hành động này không thể hoàn tác.`,
+    )
+  )
+    return;
+
+  const res = await fetchJson(`/api/accounts/${username}`, {
+    method: "DELETE",
+  });
+  if (res) {
+    showAlert("Đã xóa tài khoản.", true);
+    loadAccounts();
+  }
+} // <--- QUAN TRỌNG: Dấu này đóng hàm deleteAccount (bạn đang bị thiếu dấu này)
+
+// --- Đưa các hàm này ra ngoài để HTML gọi được ---
+window.openAddAccountModal = openAddAccountModal;
+window.closeAccountModal = closeAccountModal;
+window.deleteAccount = deleteAccount;
+// ----------------------------------------------

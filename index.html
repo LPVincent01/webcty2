@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="vi">
   <head>
     <meta charset="UTF-8" />
@@ -137,6 +137,13 @@
               <a href="#" data-section="chart">
                 <i class="fa-solid fa-chart-line icon-blue"></i>
                 <span>Biểu đồ thống kê</span>
+              </a>
+            </li>
+
+            <li id="menuAccountManagement" style="display: none">
+              <a href="#" data-section="accounts">
+                <i class="fa-solid fa-user-shield icon-red"></i>
+                <span>Quản lý tài khoản</span>
               </a>
             </li>
           </ul>
@@ -707,6 +714,38 @@
               </div>
             </div>
           </section>
+
+          <section
+            class="content-section"
+            id="accountsSection"
+            style="display: none"
+          >
+            <div class="table-container">
+              <div class="table-header">
+                <h3 class="table-title">Quản lý tài khoản hệ thống</h3>
+                <div class="table-actions">
+                  <button
+                    class="btn btn-primary"
+                    onclick="openAddAccountModal()"
+                  >
+                    <i class="fas fa-plus"></i> Thêm tài khoản
+                  </button>
+                </div>
+              </div>
+              <table id="accountsTable">
+                <thead>
+                  <tr>
+                    <th>Username</th>
+                    <th>Tên hiển thị</th>
+                    <th>Quyền (Role)</th>
+                    <th>Ngày tạo</th>
+                    <th>Thao tác</th>
+                  </tr>
+                </thead>
+                <tbody id="accountsTableBody"></tbody>
+              </table>
+            </div>
+          </section>
         </main>
       </div>
     </div>
@@ -1045,17 +1084,59 @@
             </div>
           </form>
         </div>
-        <div class="modal-footer">
-          <button
-            class="btn btn-danger"
-            id="cancelPurchaseBtn"
-            data-i18n="cancel"
-          >
-            Hủy
+      </div>
+    </div>
+
+    <!-- Account Modal (Đã đưa ra ngoài Purchase Modal) -->
+    <div class="modal" id="accountModal">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3 class="modal-title">Thêm tài khoản mới</h3>
+          <button class="modal-close" onclick="closeAccountModal()">
+            &times;
           </button>
-          <button class="btn btn-success" id="savePurchaseBtn" data-i18n="save">
-            Lưu
-          </button>
+        </div>
+        <div class="modal-body">
+          <form id="accountForm">
+            <div class="form-row">
+              <label>Tên đăng nhập</label>
+              <input
+                type="text"
+                id="accUsername"
+                required
+                placeholder="VD: ketoan1"
+              />
+            </div>
+            <div class="form-row">
+              <label>Mật khẩu</label>
+              <input
+                type="password"
+                id="accPassword"
+                required
+                placeholder="******"
+              />
+            </div>
+            <div class="form-row">
+              <label>Tên hiển thị</label>
+              <input
+                type="text"
+                id="accDisplayName"
+                placeholder="Nguyễn Văn A"
+              />
+            </div>
+            <div class="form-row">
+              <label>Quyền hạn</label>
+              <select id="accRole">
+                <option value="user">User (Nhân viên)</option>
+                <option value="admin">Admin (Quản trị)</option>
+              </select>
+            </div>
+            <div class="modal-footer" style="padding: 0; border: none">
+              <button type="submit" class="btn btn-success" style="width: 100%">
+                Tạo tài khoản
+              </button>
+            </div>
+          </form>
         </div>
       </div>
     </div>
