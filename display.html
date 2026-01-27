@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="vi">
   <head>
     <meta charset="utf-8" />
@@ -6,15 +6,28 @@
     <title>Thông tin thiết bị</title>
     <link rel="stylesheet" href="./style.css" />
     <style>
-      /* Phòng khi thiếu vài style ở project chính */
       :root {
-        --c-border: #e5e7eb; /* gray-200 */
+        --c-border: #e5e7eb;
         --c-bg: #ffffff;
-        --c-key: #0f172a; /* slate-900 */
-        --c-val: #1f2937; /* gray-800 */
-        --c-accent: #2563eb; /* blue-600 */
-        --c-row: #f8fafc; /* slate-50 */
-        --c-row-alt: #f1f5f9; /* slate-100 */
+        --c-key: #0f172a;
+        --c-val: #1f2937;
+        --c-accent: #2563eb;
+        --c-row: #f8fafc;
+        --c-row-alt: #f1f5f9;
+      }
+      /* Thêm style cho phần hiển thị ảnh */
+      .image-preview {
+        margin-top: 16px;
+        padding-top: 16px;
+        border-top: 1px solid var(--c-border);
+      }
+      .image-preview h3 {
+        font-size: 0.9rem;
+        margin-bottom: 8px;
+      }
+      .image-preview img {
+        max-width: 100%;
+        border-radius: 8px;
       }
       body {
         background: #f6f7fb;
@@ -39,6 +52,7 @@
         display: flex;
         gap: 12px;
         margin-top: 16px;
+        flex-wrap: wrap;
       }
       .btn {
         padding: 0.5rem 1rem;
@@ -53,19 +67,12 @@
         color: #111;
       }
       .muted {
-        color: #64748b; /* slate-500 */
+        color: #64748b;
         font-size: 0.95rem;
-      }
-      .center {
-        display: grid;
-        place-items: center;
-        min-height: 120px;
       }
       .error {
         color: #b91c1c;
       }
-
-      /* Danh sách key:value */
       .kv-list {
         display: flex;
         flex-direction: column;
@@ -92,7 +99,6 @@
       }
       .kv .k::after {
         content: ":";
-        position: relative;
         margin-left: 2px;
         color: var(--c-key);
         font-weight: 600;
@@ -105,21 +111,152 @@
           grid-template-columns: 1fr;
         }
       }
+
+      /* ---- Kiểm kê ---- */
+      .inventory {
+        margin-top: 20px;
+        padding-top: 12px;
+        border-top: 1px dashed var(--c-border);
+      }
+      .inventory h2 {
+        font-size: 1rem;
+        margin-bottom: 8px;
+      }
+      .inventory-row {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        margin-bottom: 10px;
+      }
+      .inventory-row label {
+        font-size: 0.9rem;
+        color: #0f172a;
+      }
+      .inventory-row select,
+      .inventory-row input {
+        width: 100%;
+        padding: 6px 8px;
+        border-radius: 6px;
+        border: 1px solid var(--c-border);
+        font-size: 0.95rem;
+      }
+      .inventory-actions {
+        margin-top: 8px;
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+      .btn-primary {
+        padding: 0.5rem 1rem;
+        border-radius: 6px;
+        border: 1px solid var(--c-accent);
+        background: var(--c-accent);
+        color: #fff;
+        cursor: pointer;
+        font-size: 0.95rem;
+      }
+      .btn-secondary {
+        padding: 0.5rem 1rem;
+        border-radius: 6px;
+        border: 1px solid var(--c-border);
+        background: #fff;
+        color: #111;
+        cursor: pointer;
+        font-size: 0.95rem;
+      }
+      .small {
+        font-size: 0.8rem;
+        color: #6b7280;
+      }
     </style>
   </head>
   <body>
     <main class="container">
       <h1>Thông tin thiết bị</h1>
-
       <div id="status" class="muted">Đang tải...</div>
       <div id="content" class="card" style="display: none"></div>
-
       <div class="row">
         <a class="btn outline" href="./">Về trang chính</a>
       </div>
     </main>
 
     <script>
+      /* ==========================
+           1) Lưu tên người kiểm kê nhẹ nhàng
+           ========================== */
+      const USER_KEY = "invUser";
+
+      function readUserFromLocalOrQR() {
+        const p = new URLSearchParams(location.search);
+        const fromQr = p.get("u"); // cho phép ?u=Emily trong QR (optional)
+        if (fromQr) {
+          localStorage.setItem(USER_KEY, fromQr);
+          return fromQr;
+        }
+        return localStorage.getItem(USER_KEY) || "";
+      }
+
+      function ensureUser() {
+        let u = readUserFromLocalOrQR();
+        if (!u) {
+          u = prompt("Nhập tên người kiểm kê (lưu cho lần sau):") || "";
+          if (u) localStorage.setItem(USER_KEY, u);
+        }
+        window.currentUsername = u; // dùng sẵn trong UI & payload
+      }
+
+      function changeUser() {
+        const cur = localStorage.getItem(USER_KEY) || "";
+        const u = prompt("Đổi tên người kiểm kê:", cur) || "";
+        localStorage.setItem(USER_KEY, u);
+        window.currentUsername = u;
+        const t = document.getElementById("invNhanVienKiemKeText");
+        if (t) t.textContent = u || "";
+      }
+
+      /* ==========================
+           2) Hàng đợi lưu cục bộ để quét nhiều mã
+           ========================== */
+      const QUEUE_KEY = "kiemkeQueue";
+
+      function loadQueue() {
+        try {
+          const raw = localStorage.getItem(QUEUE_KEY);
+          if (!raw) return [];
+          const arr = JSON.parse(raw);
+          return Array.isArray(arr) ? arr : [];
+        } catch {
+          return [];
+        }
+      }
+      function saveQueue(arr) {
+        localStorage.setItem(QUEUE_KEY, JSON.stringify(arr || []));
+      }
+
+      // Thêm hàm này vào trong thẻ <script>
+      function clearQueue() {
+        if (confirm("Bạn có chắc muốn xóa toàn bộ danh sách chờ không?")) {
+          saveQueue([]); // Lưu mảng rỗng vào localStorage
+          updateQueueHint(); // Cập nhật lại dòng thông báo
+          document.getElementById("invMessage").textContent =
+            "Đã xóa danh sách chờ.";
+        }
+      }
+
+      function updateQueueHint() {
+        const el = document.getElementById("queueHint");
+        if (!el) return;
+        const q = loadQueue();
+        el.textContent = q.length
+          ? `Đang có ${q.length} thiết bị trong danh sách chờ.`
+          : "Chưa có thiết bị nào trong danh sách chờ.";
+      }
+
+      /* ==========================
+           3) Hiển thị thiết bị + form kiểm kê
+           ========================== */
+      let currentDevice = null;
+
       function render(obj) {
         const content = document.getElementById("content");
         if (!obj) {
@@ -128,8 +265,8 @@
           content.style.display = "block";
           return;
         }
+        currentDevice = obj;
 
-        // Chuẩn hoá ngày nếu có trường NgayNhap
         if (obj.NgayNhap) {
           const d = new Date(obj.NgayNhap);
           if (!Number.isNaN(d)) {
@@ -140,23 +277,262 @@
           }
         }
 
-        // Loại bỏ 3 trường không muốn hiển thị
-        const hiddenKeys = new Set(["LastUserName", "LastUserId", "LastAssignedDate"]);
+        // Chuẩn bị phần hiển thị ảnh nếu có
+        const imageHtml = obj.HinhAnhThucTe
+          ? `
+            <div class="image-preview">
+              <h3>Hình ảnh thực tế gần nhất</h3>
+              <img src="${obj.HinhAnhThucTe}" alt="Hình ảnh thực tế của ${obj.MaThietBi}" />
+            </div>
+          `
+          : "";
+
+        const hiddenKeys = new Set([
+          "LastUserName",
+          "LastUserId",
+          "LastAssignedDate",
+          "HinhAnhThucTe", // Ẩn key này khỏi danh sách key-value vì đã hiển thị riêng
+        ]);
         const rows = Object.entries(obj)
           .filter(([k]) => !hiddenKeys.has(k))
           .map(
             ([k, v]) => `
-        <div class="kv">
-          <span class="k">${k}</span>
-          <span class="v">${
-            v === null || v === undefined ? "" : String(v)
-          }</span>
-        </div>
-      `
+              <div class="kv">
+                <span class="k">${k}</span>
+                <span class="v">${
+                  v === null || v === undefined ? "" : String(v)
+                }</span>
+              </div>`,
           )
           .join("");
-        content.innerHTML = `<div class="kv-list">${rows}</div>`;
+
+        content.innerHTML = `
+            <div class="kv-list">${rows}</div>
+            ${imageHtml}
+
+            <div class="inventory">
+              <h2>Kiểm kê tài sản</h2>
+              <div class="small">Thiết bị: <strong>${
+                obj.MaThietBi || ""
+              }</strong></div>
+
+              <div class="inventory-row">
+                <label for="invStatus">Trạng thái thực tế</label>
+                <select id="invStatus">
+                  <option value="Còn">✅ Còn</option>
+                  <option value="Hư">⚠️ Hư</option>
+                  <option value="Không thấy">❌ Không thấy</option>
+                  <option value="Dư">➕ Dư / Sai danh sách</option>
+                </select>
+              </div>
+
+              <div class="inventory-row">
+                <label for="invLocation">Vị trí thực tế (phòng/kho)</label>
+                <input id="invLocation" placeholder="VD: Hành chính, Kho, ..." />
+              </div>
+
+              <div class="inventory-row">
+                <label for="invNote">Ghi chú</label>
+                <input id="invNote" placeholder="Ghi chú thêm (nếu có)" />
+              </div>
+
+              <div class="inventory-row">
+                <label>Người kiểm kê</label>
+                <input type="hidden" id="invNhanVienKiemKe" />
+                <div id="invNhanVienKiemKeText" class="small"></div>
+                <button class="btn-secondary" type="button" onclick="changeUser()">Đổi</button>
+              </div>
+
+              <div class="inventory-row">
+                <label for="invDot">Đợt kiểm kê</label>
+                <input id="invDot" placeholder="VD: 1 (Kiểm kê T11/2025)" value="1" />
+                <div class="small">* Có thể mặc định 1 đợt, hoặc backend trả về DotID hiện hành.</div>
+              </div>
+
+              <div class="inventory-row">
+                <label for="invImage">Hình ảnh thực tế (JPG)</label>
+                <input type="file" id="invImage" accept="image/jpeg" />
+                <button class="btn-secondary" type="button" onclick="uploadImage()">Tải ảnh lên</button>
+                <div id="imageUploadMsg" class="small"></div>
+              </div>
+
+              <div class="inventory-actions">
+                <button class="btn-primary" onclick="addToQueue()">Thêm vào danh sách</button>
+                <button class="btn-secondary" onclick="clearInvForm()">Xoá nhập</button>
+                <button class="btn-secondary" onclick="submitKiemKeBulk()">Gửi tất cả về server</button>
+                <button class="btn-secondary" style="border-color: #b91c1c; color: #b91c1c;" onclick="clearQueue()">🗑 Xóa danh sách chờ</button>
+              </div>
+
+              <div id="queueHint" class="small" style="margin-top:4px;"></div>
+              <div id="invMessage" class="small" style="margin-top:6px;"></div>
+            </div>
+          `;
         content.style.display = "block";
+        assignCurrentUser();
+        updateQueueHint();
+      }
+
+      function clearInvForm() {
+        document.getElementById("invStatus").value = "Còn";
+        document.getElementById("invLocation").value = "";
+        document.getElementById("invNote").value = "";
+        const m = document.getElementById("invMessage");
+        if (m) m.textContent = "";
+      }
+
+      function buildPayloadFromForm() {
+        if (!currentDevice) return null;
+        const dotId = document.getElementById("invDot").value || "1";
+        const trangThai = document.getElementById("invStatus").value;
+        const viTri = document.getElementById("invLocation").value;
+        const nhanVienKiemKe = window.currentUsername || "";
+        const ghiChu = document.getElementById("invNote").value;
+        return {
+          DotID: dotId,
+          MaThietBi: currentDevice.MaThietBi,
+          TrangThaiThucTe: trangThai,
+          ViTriThucTe: viTri,
+          NhanVienKiemKe: nhanVienKiemKe,
+          GhiChu: ghiChu,
+        };
+      }
+
+      // Thêm vào hàng đợi (chưa gửi server)
+      function addToQueue() {
+        const msg = document.getElementById("invMessage");
+        const payload = buildPayloadFromForm();
+        if (!payload) {
+          msg.textContent = "Không có thiết bị để ghi nhận.";
+          return;
+        }
+
+        let queue = loadQueue();
+        const idx = queue.findIndex(
+          (x) =>
+            x.MaThietBi === payload.MaThietBi &&
+            String(x.DotID) === String(payload.DotID),
+        );
+        if (idx >= 0) queue[idx] = payload;
+        else queue.push(payload);
+        saveQueue(queue);
+        updateQueueHint();
+        msg.textContent =
+          "✅ Đã thêm vào danh sách chờ (chưa gửi về server). Bạn có thể quét tiếp mã khác.";
+      }
+
+      // Gửi toàn bộ hàng đợi về server (bulk)
+      async function submitKiemKeBulk() {
+        const msg = document.getElementById("invMessage");
+        let queue = loadQueue();
+        if (!queue.length) {
+          msg.textContent = "Không có thiết bị nào trong danh sách chờ.";
+          return;
+        }
+
+        const dotId =
+          document.getElementById("invDot").value || queue[0].DotID || "1";
+        try {
+          msg.textContent = "Đang gửi dữ liệu kiểm kê...";
+          const res = await fetch("/public/kiemke-bulk", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "x-inventory-user": window.currentUsername || "",
+            },
+            body: JSON.stringify({ DotID: dotId, items: queue }),
+          });
+          const text = await res.text();
+          if (!res.ok) {
+            msg.textContent = "❌ Lỗi khi gửi: " + text;
+            return;
+          }
+
+          msg.textContent =
+            "✅ Đã gửi thành công " + queue.length + " thiết bị.";
+          saveQueue([]);
+          updateQueueHint();
+        } catch (e) {
+          console.error(e);
+          msg.textContent = "❌ Không kết nối được tới máy chủ.";
+        }
+      }
+
+      /* ==========================
+           4) Tải ảnh lên server
+           ========================== */
+      async function uploadImage() {
+        const msg = document.getElementById("imageUploadMsg");
+        const fileInput = document.getElementById("invImage");
+        const file = fileInput.files[0];
+
+        if (!currentDevice || !currentDevice.MaThietBi) {
+          msg.textContent = "❌ Vui lòng tải thông tin thiết bị trước.";
+          return;
+        }
+
+        if (!file) {
+          msg.textContent = "❌ Bạn chưa chọn tệp hình ảnh nào.";
+          return;
+        }
+
+        const formData = new FormData();
+        formData.append("maThietBi", currentDevice.MaThietBi);
+        formData.append(
+          "dotId",
+          document.getElementById("invDot").value || "1",
+        );
+
+        // Gửi thêm tên nhân viên để database không bị "N/A"
+        formData.append("nhanVien", window.currentUsername || "");
+
+        // 2. ĐƯA FILE ẢNH VÀO SAU CÙNG
+        formData.append("image", file);
+
+        try {
+          msg.textContent = "Đang tải ảnh lên...";
+          const res = await fetch("/public/upload-image", {
+            method: "POST",
+            body: formData, // FormData tự động đặt header Content-Type đúng
+          });
+          /* ===== BẮT ĐẦU FIX: parse response an toàn (JSON hoặc TEXT) ===== */
+          const ct = res.headers.get("content-type") || "";
+          const text = await res.text();
+          let result = null;
+
+          if (ct.includes("application/json")) {
+            try {
+              result = JSON.parse(text);
+            } catch (_) {
+              result = null;
+            }
+          }
+
+          if (!res.ok) {
+            throw new Error(
+              result?.message || text || "Lỗi không xác định từ server.",
+            );
+          }
+          /* ===== KẾT THÚC FIX ===== */
+
+          msg.textContent = `✅ Tải ảnh thành công!`;
+          // Cập nhật lại ảnh preview ngay lập tức
+          const imagePreviewContainer =
+            document.querySelector(".image-preview");
+          if (imagePreviewContainer)
+            imagePreviewContainer.querySelector("img").src = result.path;
+        } catch (e) {
+          msg.textContent = `❌ Lỗi khi tải ảnh: ${e.message}`;
+        }
+      }
+      /* ==========================
+           4) Luồng load trang từ QR
+           ========================== */
+      function assignCurrentUser() {
+        const user = window.currentUsername || "";
+        const el = document.getElementById("invNhanVienKiemKe");
+        const elText = document.getElementById("invNhanVienKiemKeText");
+        if (el) el.value = user;
+        if (elText) elText.textContent = user;
       }
 
       async function main() {
@@ -165,25 +541,25 @@
         const raw = p.get("data");
         const id = p.get("id");
 
-        // 1) Trường hợp QR chứa sẵn JSON (?data=...)
+        // QR chứa JSON
         if (raw) {
           try {
             const obj = JSON.parse(decodeURIComponent(raw));
             status.style.display = "none";
             render(obj);
             return;
-          } catch (e) {
+          } catch {
             status.innerHTML =
               '<span class="error">Dữ liệu QR không hợp lệ.</span>';
             return;
           }
         }
 
-        // 2) Trường hợp QR chỉ chứa ID (?id=...)
+        // QR chứa id thiết bị
         if (id) {
           try {
             const res = await fetch(
-              `/public/devices/${encodeURIComponent(id)}`
+              `/public/devices/${encodeURIComponent(id)}`,
             );
             if (!res.ok) {
               status.innerHTML =
@@ -194,7 +570,7 @@
             status.style.display = "none";
             render(obj);
             return;
-          } catch (e) {
+          } catch {
             status.innerHTML =
               '<span class="error">Không thể kết nối máy chủ.</span>';
             return;
@@ -204,6 +580,9 @@
         status.innerHTML =
           '<span class="error">Thiếu tham số trên URL. Hãy mở trang qua QR hợp lệ.</span>';
       }
+
+      // Khởi động
+      ensureUser();
       main();
     </script>
   </body>

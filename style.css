@@ -27,10 +27,27 @@
   box-sizing: border-box;
   font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
 }
+/* Giữ đúng font cho Font Awesome icons */
+.fa,
+.fas,
+.far,
+.fal,
+.fab,
+.fa-solid,
+.fa-regular,
+.fa-brands {
+  font-family: "Font Awesome 6 Free" !important;
+  font-weight: 900;
+}
 
 body {
-  background-color: #f5f5f5;
+  margin: 0; /* 👉 thêm dòng này */
+  padding: 0; /* 👉 thêm dòng này cho chắc */
+  /* nền gradient dịu, vẫn giữ text dễ đọc */
+  background: linear-gradient(180deg, #f7fbff 0%, #eef5ff 40%, #f5f5f5 100%);
   color: var(--text-dark);
+  /*background-color: #f5f5f5;
+  color: var(--text-dark);*/
 }
 
 /* ========================
@@ -42,45 +59,73 @@ body {
   align-items: center;
   height: 100vh;
   position: relative;
-  background: #000
-    url("https://images.unsplash.com/photo-1444703686981-a3abbc4d4fe3?q=80&w=1600&auto=format&fit=crop")
-    center/cover no-repeat fixed;
+  /* dùng hình showroom */
+  background: #000 url("styleimage/springtex.png") center/cover no-repeat fixed;
 }
 /* lớp phủ làm tối nền để chữ và form nổi bật hơn */
 .login-container::before {
   content: "";
   position: absolute;
   inset: 0;
-  background: rgba(0, 0, 0, 0.45);
+  background: rgba(0, 0, 0, 0);
   pointer-events: none;
 }
-/* chữ SPRINGTEX nổi bật */
-.brand-banner {
+/* Logo Springtex góc trên trái */
+.login-logo {
   position: absolute;
-  top: 8%;
-  left: 0;
-  width: 100%;
-  text-align: center;
-  font-weight: 800;
-  font-size: clamp(28px, 5vw, 56px);
-  color: #fff;
-  letter-spacing: 4px;
-  text-shadow: 0 4px 16px rgba(0, 0, 0, 0.6), 0 0 24px rgba(37, 99, 235, 0.6);
-  z-index: 1;
+  top: -50px; /* chỉnh lên/xuống tuỳ mắt nhìn */
+  left: 24px; /* chỉnh trái/phải tuỳ ý */
+  z-index: 2; /* cao hơn nền, thấp hơn form cũng được */
 }
-/* đảm bảo form đứng trên overlay và nền */
+
+.login-logo img {
+  height: 220px; /* muốn logo to hơn thì tăng số này, ví dụ 60px */
+  width: auto;
+  display: block;
+}
+
+/* đảm bảo form đứng trên overlay và nền + hiệu ứng kính mờ */
 .login-form {
   position: relative;
   z-index: 2;
+
+  max-width: 420px;
+  width: 100%;
+  padding: 2.5rem 2rem;
+  border-radius: 18px;
+
+  /* kính mờ trong suốt */
+  background: rgba(255, 255, 255, 0.14);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.45);
+
+  transition:
+    opacity 0.4s ease,
+    transform 0.4s ease;
 }
 
-.login-form {
-  background: white;
-  padding: 2rem;
-  border-radius: 8px;
-  max-width: 400px;
-  width: 100%;
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+/* trạng thái ẨN form (dùng cho hiệu ứng click mới hiện) */
+.login-form.hidden {
+  opacity: 0;
+  transform: translateY(12px) scale(0.96);
+  pointer-events: none;
+}
+
+/* Màu chữ / input trên nền kính mờ */
+.login-container .login-form h1 {
+  color: #ffffff;
+}
+
+.login-container .form-group label {
+  color: #f5f5f5;
+}
+
+.login-container .form-group input {
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.8);
 }
 
 .login-form h1 {
@@ -104,6 +149,22 @@ body {
   padding: 0.75rem;
   border: 1px solid #ddd;
   border-radius: 4px;
+}
+
+/* Wrapper cho trường mật khẩu để chứa icon */
+.password-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+/* Icon hiển thị mật khẩu */
+.password-wrapper #togglePassword {
+  position: absolute;
+  right: 1rem;
+  cursor: pointer;
+  color: var(--text-light);
+  /* Không cần top/transform vì đã có flex align-items */
 }
 
 /* Date placeholder styling */
@@ -141,12 +202,26 @@ input[type="date"]:valid::before {
 }
 
 .header {
-  background: var(--dark-color);
+  /*background: var(--dark-color);*/
+  background: linear-gradient(90deg, #243447, #2c3e50);
   color: white;
   padding: 1rem 2rem;
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+/* Language Switcher */
+.language-switcher {
+  margin-right: 1.5rem;
+}
+.language-switcher select {
+  background-color: var(--dark-color);
+  color: white;
+  border: 1px solid #555;
+  padding: 0.4rem 0.6rem;
+  border-radius: 4px;
+  font-size: 0.9rem;
 }
 
 .user-menu {
@@ -181,7 +256,9 @@ input[type="date"]:valid::before {
   width: 250px;
   background: white;
   padding: 1.5rem 0;
-  box-shadow: 2px 0 5px rgba(0, 0, 0, 0.1);
+  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.06);
+  border-right: 1px solid #eef2f7;
+  /*box-shadow: 2px 0 5px rgba(0, 0, 0, 0.1);*/
 }
 .sidebar-menu {
   list-style: none;
@@ -199,7 +276,7 @@ input[type="date"]:valid::before {
 }
 .sidebar-menu a:hover,
 .sidebar-menu a.active {
-  background: var(--light-color);
+  background: #eef5ff;
   color: var(--primary-color);
   border-left: 4px solid var(--primary-color);
 }
@@ -232,6 +309,11 @@ input[type="date"]:valid::before {
 .card:hover {
   transform: translateY(-5px);
 }
+/* Thêm con trỏ cho các thẻ có thể nhấp */
+.clickable-card {
+  cursor: pointer;
+}
+
 .card-header {
   display: flex;
   justify-content: space-between;
@@ -290,6 +372,12 @@ input[type="date"]:valid::before {
   height: 300px;
 }
 
+/* Container for side-by-side charts */
+.charts-row {
+  /* Các biểu đồ con sẽ tự động xếp chồng lên nhau */
+  margin-bottom: 2rem;
+}
+
 /* ========================
    TABLES
 ======================== */
@@ -303,11 +391,30 @@ input[type="date"]:valid::before {
 .table-header {
   display: flex;
   justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
   padding: 1rem;
   border-bottom: 1px solid #eee;
+  gap: 1rem;
+}
+.table-filters {
+  display: flex;
+  gap: 0.75rem;
+  flex-grow: 1;
+}
+.table-filters input,
+.table-filters select {
+  padding: 0.5rem;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 0.9rem;
+}
+.table-filters input {
+  min-width: 250px;
 }
 .table-actions {
   display: flex;
+  flex-shrink: 0;
   gap: 0.5rem;
 }
 table {
@@ -318,95 +425,47 @@ table {
 /* Column alignment for devices/users tables */
 #devicesTable,
 #usersTable {
-  table-layout: fixed;
+  /* table-layout: fixed; */ /* Bỏ fixed để cột tự điều chỉnh */
+  table-layout: auto;
+  width: 100%; /* Đảm bảo bảng chiếm đủ chiều rộng */
 }
+
 #devicesTable th,
 #devicesTable td,
 #usersTable th,
 #usersTable td {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  /* white-space: nowrap; */ /* Cho phép text xuống dòng */
+  /* overflow: hidden; */
+  /* text-overflow: ellipsis; */
   vertical-align: middle;
+  text-align: center; /* Căn giữa nội dung cho cả header và cell */
 }
+
 /* Ensure cell width includes padding/border to align with colgroup */
 table th,
 table td {
   box-sizing: border-box;
 }
 
-/* Force consistent text alignment between headers and cells */
-#devicesTable th,
-#usersTable th {
-  text-align: left;
-}
-#devicesTable td,
-#usersTable td {
-  text-align: left;
-}
-
-/* Devices table columns */
-#devicesTable th:nth-child(1),
-#devicesTable td:nth-child(1) {
-  width: 120px;
-}
-#devicesTable th:nth-child(2),
+/* Đặt min-width cho các cột để tránh bị co lại quá mức */
+/* Cột Tên thiết bị và Người sử dụng cần rộng hơn */
+#devicesTable th:nth-child(2), /* Tên thiết bị */
 #devicesTable td:nth-child(2) {
-  width: 220px;
+  min-width: 200px;
 }
-#devicesTable th:nth-child(3),
-#devicesTable td:nth-child(3) {
-  width: 140px;
-}
-#devicesTable th:nth-child(4),
-#devicesTable td:nth-child(4) {
-  width: 140px;
-}
-#devicesTable th:nth-child(5),
-#devicesTable td:nth-child(5) {
-  width: 120px;
-}
-#devicesTable th:nth-child(6),
-#devicesTable td:nth-child(6) {
-  width: 130px;
-}
-#devicesTable th:nth-child(7),
+#devicesTable th:nth-child(7), /* Người sử dụng */
 #devicesTable td:nth-child(7) {
-  width: 180px;
-}
-#devicesTable th:nth-child(8),
-#devicesTable td:nth-child(8) {
-  width: 110px;
+  min-width: 160px;
 }
 
-/* Users table columns */
-#usersTable th:nth-child(1),
-#usersTable td:nth-child(1) {
-  width: 110px;
-}
-#usersTable th:nth-child(2),
+/* Cột Họ và tên, Thiết bị sử dụng trong bảng Users */
+#usersTable th:nth-child(2), /* Họ và tên */
 #usersTable td:nth-child(2) {
-  width: 200px;
+  min-width: 180px;
 }
-#usersTable th:nth-child(3),
-#usersTable td:nth-child(3) {
-  width: 160px;
-}
-#usersTable th:nth-child(4),
+#usersTable th:nth-child(4), /* Thiết bị sử dụng */
 #usersTable td:nth-child(4) {
-  width: 160px;
-}
-#usersTable th:nth-child(5),
-#usersTable td:nth-child(5) {
-  width: 120px;
-}
-#usersTable th:nth-child(6),
-#usersTable td:nth-child(6) {
-  width: 130px;
-}
-#usersTable th:nth-child(7),
-#usersTable td:nth-child(7) {
-  width: 110px;
+  min-width: 180px;
 }
 th,
 td {
@@ -421,6 +480,30 @@ tr:hover {
   background: #f9f9f9;
 }
 
+/* Styles for sortable table headers */
+th.sortable {
+  cursor: pointer;
+  position: relative;
+  user-select: none; /* Prevent text selection on click */
+}
+th.sortable:hover {
+  background: #e0e0e0;
+}
+th.sortable::after {
+  content: "";
+  position: absolute;
+  right: 1rem;
+  top: 50%;
+  transform: translateY(-50%);
+  opacity: 0.5;
+  border: 4px solid transparent;
+}
+th.sorted-asc::after {
+  border-bottom-color: #333;
+}
+th.sorted-desc::after {
+  border-top-color: #333;
+}
 /* Status badges (hiển thị trong bảng) */
 .status-badge {
   padding: 0.25rem 0.75rem;
@@ -455,6 +538,68 @@ tr:hover {
 .action-btns {
   display: flex;
   gap: 0.5rem;
+}
+
+/* Thumbnail trong bảng */
+.table-thumbnail {
+  width: 60px;
+  height: 60px;
+  object-fit: cover;
+  border-radius: 4px;
+  border: 1px solid #ddd;
+  transition: transform 0.2s;
+  cursor: pointer;
+}
+.table-thumbnail:hover {
+  transform: scale(1.1);
+}
+
+/* ====== PURCHASES TABLE ====== */
+
+#purchasesTable {
+  width: 100%;
+  table-layout: auto;
+}
+
+#purchasesTable th,
+#purchasesTable td {
+  text-align: center;
+  vertical-align: middle;
+}
+
+/* Tiêu đề Thành tiền canh giữa */
+#purchasesTable th:nth-child(5) {
+  text-align: center;
+}
+
+/* Số tiền bên dưới căn phải */
+#purchasesTable td:nth-child(5) {
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* Badge cho nguồn mua (VN / CN / khác) */
+.purchase-source-badge {
+  display: inline-block;
+  padding: 0.25rem 0.75rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.purchase-source-vn {
+  background: #d4edda;
+  color: #155724;
+}
+
+.purchase-source-cn {
+  background: #d1ecf1;
+  color: #0c5460;
+}
+
+.purchase-source-other {
+  background: #e2e3e5;
+  color: #383d41;
 }
 
 /* ========================
@@ -555,6 +700,17 @@ tr:hover {
   border-radius: 4px;
 }
 
+/* Styling cho radio group */
+.radio-group {
+  display: flex;
+  gap: 1.5rem;
+  align-items: center;
+  padding-top: 0.5rem;
+}
+.radio-group label {
+  font-weight: normal; /* Ghi đè font-weight: 600 từ .form-row label */
+}
+
 /* ========================
    ALERTS
 ======================== */
@@ -599,6 +755,86 @@ tr:hover {
 }
 
 /* ========================
+   PAGINATION
+======================== */
+.pagination-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 1rem;
+  gap: 0.5rem;
+  user-select: none;
+}
+
+.pagination-btn {
+  padding: 0.6rem 1.1rem; /* Tăng padding */
+  font-size: 1rem; /* Tăng kích thước chữ */
+  border: 1px solid #ddd;
+  background-color: #fff;
+  color: var(--primary-color);
+  cursor: pointer;
+  border-radius: 4px;
+  transition:
+    background-color 0.2s,
+    color 0.2s;
+}
+
+.pagination-btn:hover:not(:disabled) {
+  background-color: #eef5ff;
+  border-color: #cce0ff;
+}
+
+.pagination-btn.active {
+  background-color: var(--primary-color);
+  color: #fff;
+  border-color: var(--primary-color);
+  font-weight: 600;
+}
+
+.pagination-btn:disabled {
+  color: #aaa;
+  cursor: not-allowed;
+  background-color: #f5f5f5;
+}
+
+.pagination-ellipsis {
+  padding: 0.5rem 0.25rem;
+  color: #aaa;
+}
+
+/* ========================
+   ANIMATIONS
+======================== */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-in {
+  animation: fadeInUp 0.5s ease-out forwards;
+}
+
+/* Staggered animation for dashboard cards */
+.dashboard-cards .card.animate-in:nth-child(1) {
+  animation-delay: 0.1s;
+}
+.dashboard-cards .card.animate-in:nth-child(2) {
+  animation-delay: 0.2s;
+}
+.dashboard-cards .card.animate-in:nth-child(3) {
+  animation-delay: 0.3s;
+}
+.dashboard-cards .card.animate-in:nth-child(4) {
+  animation-delay: 0.4s;
+}
+
+/* ========================
    RESPONSIVE
 ======================== */
 @media (max-width: 768px) {
@@ -611,6 +847,9 @@ tr:hover {
   .sidebar-menu {
     display: flex;
     overflow-x: auto;
+  }
+  .charts-row {
+    grid-template-columns: 1fr;
   }
   .sidebar-menu li {
     margin-right: 1rem;
@@ -629,4 +868,199 @@ tr:hover {
     width: calc(100% - 40px);
     top: 10px;
   }
+}
+/* ========================
+   SIDEBAR - NEW STYLE
+======================== */
+.sidebar {
+  width: 250px;
+  background: #e0f2fe;
+  padding: 1.5rem 0;
+  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.06);
+  border-right: 1px solid #bfdbfe;
+}
+
+.sidebar-menu {
+  list-style: none;
+  padding: 0 1rem;
+}
+
+.sidebar-menu li {
+  margin-bottom: 12px;
+}
+
+/* Mỗi mục = 1 card nhỏ */
+.sidebar-menu a {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: #f9fbff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  text-decoration: none;
+  color: #555;
+  font-weight: 500;
+  transition: 0.25s ease;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.03);
+  overflow: hidden;
+}
+
+/* Icon trong ô bo góc rõ ràng */
+.sidebar-menu a i {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: #e9f2ff;
+  color: var(--primary-color);
+  font-size: 1.15rem;
+}
+/* Màu riêng cho từng biểu tượng */
+.icon-yellow {
+  background-color: #fef9e7;
+  color: #f1c40f;
+}
+.icon-green {
+  background-color: #e8f8f5;
+  color: #1abc9c;
+}
+.icon-orange {
+  background-color: #fcefe3;
+  color: #e67e22;
+}
+.icon-red {
+  background-color: #f9ebea;
+  color: #c0392b;
+}
+.icon-blue {
+  background-color: #eaf2f8;
+  color: #2980b9;
+}
+
+/* Text */
+.sidebar-menu a span {
+  flex: 1;
+}
+
+/* Hover: nổi lên + đổi màu */
+.sidebar-menu a:hover {
+  background: #eef5ff;
+  border-color: #c8d8ff;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
+  color: var(--primary-color);
+}
+
+/* Active: nhấn mạnh hơn, giống đang chọn */
+.sidebar-menu a.active {
+  background: #e8f1ff;
+  border-left: 4px solid var(--primary-color);
+  border-color: #c8d8ff;
+  color: var(--primary-color);
+  font-weight: 600;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.12);
+}
+
+/* Để icon cũng đậm hơn khi active/hover */
+.sidebar-menu a:hover i,
+.sidebar-menu a.active i {
+  background: #d8e6ff;
+}
+
+/* ========== UI ENHANCEMENTS (27-11-2025) ========== */
+
+/* 1. Header glass look */
+.header {
+  backdrop-filter: blur(14px);
+  background: linear-gradient(
+    90deg,
+    #1e3a8a,
+    /* xanh dương sáng bên trái */ #0f172a /* xanh than đậm bên phải */
+  );
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.25);
+}
+
+.header h1 {
+  letter-spacing: 0.08em;
+  font-weight: 700;
+}
+
+/* 2. Sidebar interactions */
+.sidebar-menu a {
+  position: relative;
+  transition:
+    transform 0.18s ease,
+    box-shadow 0.18s ease,
+    background 0.18s ease,
+    border-color 0.18s ease,
+    color 0.18s ease;
+}
+
+.sidebar-menu a:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 10px rgba(15, 23, 42, 0.08);
+}
+
+.sidebar-menu a.active {
+  background: linear-gradient(135deg, #eef5ff, #ffffff);
+  border-left: 4px solid #4f8df9;
+  border-color: rgba(52, 152, 219, 0.6);
+  color: var(--primary-color);
+  font-weight: 600;
+  box-shadow: 0 8px 18px rgba(37, 99, 235, 0.12);
+}
+
+.sidebar-menu a.active i {
+  transform: scale(1.05);
+}
+
+/* 3. Cards */
+.card {
+  border-radius: 14px;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  box-shadow: 0 10px 25px rgba(15, 23, 42, 0.06);
+  background: radial-gradient(
+    circle at top left,
+    #f9fbff 0,
+    #ffffff 55%,
+    #f7f7f7 100%
+  );
+}
+
+.card:hover {
+  transform: translateY(-6px);
+  box-shadow: 0 18px 35px rgba(15, 23, 42, 0.12);
+}
+
+/* Nếu có class card-value thì số sẽ to hơn, nếu chưa có thì bỏ đoạn này cũng được */
+.card-value {
+  font-size: 2.4rem;
+}
+
+/* 4. Chart cards */
+.chart-container {
+  border-radius: 14px;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  box-shadow: 0 10px 25px rgba(15, 23, 42, 0.05);
+}
+
+/* 5. Tables */
+.table-container table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+table tbody tr:nth-child(odd) {
+  background-color: #fbfdff;
+}
+
+table tbody tr:hover {
+  background-color: #eef5ff;
 }
