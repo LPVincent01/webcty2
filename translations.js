@@ -305,6 +305,24 @@ const translations = {
     noDevicesForPurchase: "Không còn thiết bị nào chưa được thêm",
     deviceNotFound: "Không tìm thấy thiết bị",
     addPurchase: "Thêm",
+    // --- [THÊM MỚI] QUẢN LÝ TÀI KHOẢN ---
+    accountManagement: "Quản lý tài khoản",
+    accountListTitle: "Quản lý tài khoản hệ thống",
+    addAccount: "Thêm tài khoản",
+
+    // Các cột trong bảng
+    acc_username: "Tên đăng nhập", // Đã đổi từ Username -> Tên đăng nhập
+    acc_displayName: "Tên hiển thị",
+    acc_role: "Quyền (Role)",
+    acc_password: "Mật khẩu",
+    acc_createdDate: "Ngày tạo",
+    acc_actions: "Thao tác",
+
+    // Modal Thêm tài khoản
+    addAccountModalTitle: "Thêm tài khoản mới",
+    acc_role_admin: "Admin (Quản trị)",
+    acc_role_user: "User (Nhân viên)",
+    createAccountBtn: "Tạo tài khoản",
   },
   // Tiếng Trung
   zh: {
@@ -584,5 +602,23 @@ const translations = {
     deviceNotFound: "未找到设备",
     addPurchaseInfo: "添加采购信息",
     addPurchase: "添加",
+    // --- [THÊM MỚI] QUẢN LÝ TÀI KHOẢN (DỊCH) ---
+    accountManagement: "账户管理",
+    accountListTitle: "系统账户管理",
+    addAccount: "添加账户",
+
+    // Các cột trong bảng
+    acc_username: "用户名",
+    acc_displayName: "显示名称",
+    acc_role: "权限 (Role)",
+    acc_password: "密码",
+    acc_createdDate: "创建日期",
+    acc_actions: "操作",
+
+    // Modal Thêm tài khoản
+    addAccountModalTitle: "添加新账户",
+    acc_role_admin: "Admin (管理员)",
+    acc_role_user: "User (员工)",
+    createAccountBtn: "创建账户",
   },
 };

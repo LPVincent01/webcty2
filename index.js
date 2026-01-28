@@ -152,36 +152,65 @@ app.get("/api/accounts", authenticate, authorizeAdmin, async (req, res) => {
     const pool = await poolPromise;
     const result = await pool
       .request()
-      .query("SELECT Username, Role, DisplayName, CreatedAt FROM dbo.TAIKHOAN");
+      .query(
+        "SELECT Username, Role, DisplayName, CreatedAt, MatKhauGoc FROM dbo.TAIKHOAN",
+      );
     res.json(result.recordset);
   } catch (err) {
     handleSqlError(res, err);
   }
 });
 
-// Tạo tài khoản mới
+// [BẮT ĐẦU ĐOẠN SỬA]
+// 2. Tạo tài khoản mới (Có mã hóa mật khẩu + Lưu mật khẩu gốc)
 app.post("/api/accounts", authenticate, authorizeAdmin, async (req, res) => {
   const { username, password, role, displayName } = req.body;
-  if (!username || !password) return res.status(400).send("Thiếu user/pass");
+
+  if (!username || !password) {
+    return res.status(400).send("Thiếu tên đăng nhập hoặc mật khẩu");
+  }
 
   try {
-    const salt = await bcrypt.genSalt(10);
-    const hash = await bcrypt.hash(password, salt);
     const pool = await poolPromise;
+
+    // Kiểm tra trùng username
+    const check = await pool
+      .request()
+      .input("Username", sql.VarChar, username)
+      .query("SELECT 1 FROM dbo.TAIKHOAN WHERE Username = @Username");
+
+    if (check.recordset.length > 0) {
+      return res.status(409).send("Tên đăng nhập đã tồn tại!");
+    }
+
+    // Mã hóa mật khẩu
+    let passwordToSave = password;
+    try {
+      const bcrypt = require("bcryptjs");
+      const salt = await bcrypt.genSalt(10);
+      passwordToSave = await bcrypt.hash(password, salt);
+    } catch (e) {
+      console.warn("Chưa cài bcryptjs, lưu mật khẩu dạng thô.");
+    }
+
+    // LƯU Ý: Thêm @MatKhauGoc vào câu lệnh INSERT
     await pool
       .request()
       .input("Username", sql.VarChar, username)
-      .input("PasswordHash", sql.VarChar, hash)
+      .input("PasswordHash", sql.VarChar, passwordToSave) // Mật khẩu đã mã hóa dùng để đăng nhập
+      .input("MatKhauGoc", sql.NVarChar, password) // Mật khẩu gốc dùng để xem
       .input("Role", sql.VarChar, role || "user")
-      .input("DisplayName", sql.NVarChar, displayName || username)
-      .query(
-        `INSERT INTO dbo.TAIKHOAN (Username, PasswordHash, Role, DisplayName) VALUES (@Username, @PasswordHash, @Role, @DisplayName)`,
-      );
+      .input("DisplayName", sql.NVarChar, displayName || username).query(`
+        INSERT INTO dbo.TAIKHOAN (Username, PasswordHash, Role, DisplayName, MatKhauGoc)
+        VALUES (@Username, @PasswordHash, @Role, @DisplayName, @MatKhauGoc)
+      `);
+
     res.status(201).send("Tạo tài khoản thành công");
   } catch (err) {
     handleSqlError(res, err);
   }
 });
+// [KẾT THÚC ĐOẠN SỬA]
 
 // Xóa tài khoản
 app.delete(

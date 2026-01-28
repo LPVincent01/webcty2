@@ -3009,7 +3009,7 @@ if (accountFormElement) {
   });
 }
 
-// 4. Hàm tải danh sách tài khoản từ Server
+// 4. Hàm tải danh sách tài khoản từ Server (ĐÃ SỬA: Thêm cột Mật khẩu + Con mắt ẩn hiện)
 async function loadAccounts() {
   // Chỉ admin mới được tải
   if (window.currentRole !== "admin") return;
@@ -3020,15 +3020,15 @@ async function loadAccounts() {
   const tbody = document.getElementById("accountsTableBody");
   if (!tbody) return;
 
-  tbody.innerHTML = ""; // Xóa cũ
+  tbody.innerHTML = ""; // Xóa dữ liệu cũ
 
-  data.forEach((acc) => {
+  data.forEach((acc, index) => {
     // Format ngày tạo
     const dateStr = acc.CreatedAt
       ? new Date(acc.CreatedAt).toLocaleDateString("vi-VN")
       : "-";
 
-    // Logic nút xóa: Không cho xóa chính mình và admin gốc
+    // Logic nút xóa
     const isMe = acc.Username === window.currentUsername;
     const isSuperAdmin = acc.Username === "admin";
 
@@ -3037,18 +3037,51 @@ async function loadAccounts() {
       deleteBtn = `<button class="btn btn-danger btn-sm" onclick="deleteAccount('${acc.Username}')" title="Xóa"><i class="fas fa-trash"></i></button>`;
     }
 
-    // Badge quyền hạn đẹp mắt
     let roleBadge =
       acc.Role === "admin"
         ? '<span class="status-badge status-broken">Admin</span>'
         : '<span class="status-badge status-available">User</span>';
 
+    /* --- XỬ LÝ HIỂN THỊ MẬT KHẨU --- */
+    let passwordHtml = "";
+    if (acc.MatKhauGoc) {
+      // Tạo ID riêng cho mỗi dòng để JS biết cần mở dòng nào
+      const inputId = `pass-input-${index}`;
+
+      // Dùng input type="password" để mặc định ẩn (hiện chấm tròn)
+      // Thêm style trực tiếp (inline-css) để bạn không cần sửa file .css
+      passwordHtml = `
+        <div style="display: flex; align-items: center; justify-content: center; gap: 8px;">
+            <input type="password" 
+                   value="${acc.MatKhauGoc}" 
+                   id="${inputId}" 
+                   readonly 
+                   style="border: none; background: transparent; width: 100px; text-align: center; color: #d63031; font-weight: bold; outline: none; font-family: monospace;"
+            />
+            <i class="fas fa-eye" 
+               onclick="toggleTablePassword('${inputId}', this)" 
+               title="Xem mật khẩu"
+               style="cursor: pointer; color: #555;">
+            </i>
+        </div>
+      `;
+    } else {
+      // Tài khoản cũ không có mật khẩu gốc
+      passwordHtml =
+        '<span style="color:#aaa; font-style:italic; font-size: 0.9em;">(Đã mã hóa)</span>';
+    }
+
+    /* --- RENDER HTML (Lưu ý: Đã chỉnh lại thứ tự cột cho khớp tiêu đề) --- */
     tbody.innerHTML += `
       <tr>
         <td>${acc.Username}</td>
         <td>${acc.DisplayName || ""}</td>
         <td style="text-align:center">${roleBadge}</td>
+        
+        <td style="text-align:center">${passwordHtml}</td>
+        
         <td style="text-align:center">${dateStr}</td>
+        
         <td style="text-align:center">
             <div class="action-btns" style="justify-content:center">
                 ${deleteBtn}
@@ -3059,7 +3092,23 @@ async function loadAccounts() {
   });
 }
 
-// 5. Hàm xóa tài khoản
+// 5. Hàm xử lý bật/tắt hiển thị mật khẩu (MỚI)
+function toggleTablePassword(inputId, iconElement) {
+  const input = document.getElementById(inputId);
+  if (!input) return;
+
+  if (input.type === "password") {
+    input.type = "text"; // Hiện mật khẩu
+    iconElement.classList.remove("fa-eye");
+    iconElement.classList.add("fa-eye-slash"); // Đổi icon thành gạch chéo
+  } else {
+    input.type = "password"; // Ẩn mật khẩu (dạng chấm tròn)
+    iconElement.classList.remove("fa-eye-slash");
+    iconElement.classList.add("fa-eye"); // Đổi icon về bình thường
+  }
+}
+
+// 6. Hàm xóa tài khoản
 async function deleteAccount(username) {
   if (
     !confirm(
@@ -3075,10 +3124,12 @@ async function deleteAccount(username) {
     showAlert("Đã xóa tài khoản.", true);
     loadAccounts();
   }
-} // <--- QUAN TRỌNG: Dấu này đóng hàm deleteAccount (bạn đang bị thiếu dấu này)
+}
 
 // --- Đưa các hàm này ra ngoài để HTML gọi được ---
 window.openAddAccountModal = openAddAccountModal;
 window.closeAccountModal = closeAccountModal;
 window.deleteAccount = deleteAccount;
+window.loadAccounts = loadAccounts;
+window.toggleTablePassword = toggleTablePassword; // Đừng quên dòng này
 // ----------------------------------------------

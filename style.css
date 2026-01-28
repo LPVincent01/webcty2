@@ -1082,3 +1082,32 @@ table tbody tr:hover {
   /* Cột Thao tác */
   text-align: center;
 }
+
+/* Style cho ô mật khẩu trong bảng */
+.password-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.password-input-readonly {
+  border: none;
+  background: transparent;
+  width: 100px; /* Độ rộng cố định */
+  text-align: center;
+  font-family: monospace;
+  outline: none;
+  color: #d63031;
+  font-weight: bold;
+}
+
+.toggle-icon {
+  cursor: pointer;
+  color: #555;
+  transition: color 0.2s;
+}
+
+.toggle-icon:hover {
+  color: #000;
+}
