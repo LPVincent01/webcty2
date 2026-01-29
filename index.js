@@ -1630,7 +1630,8 @@ app.get("/public/devices/:id", async (req, res) => {
       .input("MaThietBi", sql.VarChar, req.params.id).query(`
         SELECT TOP 1
           t.*,
-          kk.HinhAnhThucTe
+          -- [FIX] Lấy ảnh từ cả 2 bảng, ưu tiên ảnh mới nhất từ THIETBI
+          COALESCE(t.HinhAnhThucTe, kk.HinhAnhThucTe) as HinhAnhHienThi
         FROM dbo.THIETBI t
         LEFT JOIN (
           SELECT

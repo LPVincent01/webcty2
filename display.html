@@ -278,11 +278,18 @@
         }
 
         // Chuẩn bị phần hiển thị ảnh nếu có
-        const imageHtml = obj.HinhAnhThucTe
+        // [FIX] Lấy ảnh từ HinhAnhHienThi (ưu tiên) hoặc HinhAnhThucTe
+        const rawImg = obj.HinhAnhHienThi || obj.HinhAnhThucTe;
+        let cleanPath = "";
+        if (rawImg && typeof rawImg === "string") {
+          cleanPath = rawImg.replace(/\\/g, "/"); // Đổi dấu gạch chéo ngược thành xuôi
+        }
+
+        const imageHtml = cleanPath
           ? `
             <div class="image-preview">
               <h3>Hình ảnh thực tế gần nhất</h3>
-              <img src="${obj.HinhAnhThucTe}" alt="Hình ảnh thực tế của ${obj.MaThietBi}" />
+              <img src="${encodeURI(cleanPath)}" alt="Hình ảnh thực tế của ${obj.MaThietBi}" />
             </div>
           `
           : "";
@@ -291,7 +298,8 @@
           "LastUserName",
           "LastUserId",
           "LastAssignedDate",
-          "HinhAnhThucTe", // Ẩn key này khỏi danh sách key-value vì đã hiển thị riêng
+          "HinhAnhThucTe",
+          "HinhAnhHienThi", // [FIX] Ẩn luôn key này khỏi danh sách text
         ]);
         const rows = Object.entries(obj)
           .filter(([k]) => !hiddenKeys.has(k))
