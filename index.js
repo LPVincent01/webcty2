@@ -233,99 +233,6 @@ app.delete(
   },
 );
 
-/* --- BẮT ĐẦU ĐOẠN CODE API QUẢN LÝ TÀI KHOẢN (THÊM VÀO ĐÂY) --- */
-
-// 1. Lấy danh sách tài khoản
-app.get("/api/accounts", authenticate, authorizeAdmin, async (req, res) => {
-  try {
-    const pool = await poolPromise;
-    // Lấy tất cả trừ password hash
-    const result = await pool
-      .request()
-      .query(
-        "SELECT Username, Role, DisplayName, CreatedAt FROM dbo.TAIKHOAN ORDER BY CreatedAt DESC",
-      );
-    res.json(result.recordset);
-  } catch (err) {
-    handleSqlError(res, err);
-  }
-});
-
-// 2. Tạo tài khoản mới (Có mã hóa mật khẩu)
-app.post("/api/accounts", authenticate, authorizeAdmin, async (req, res) => {
-  const { username, password, role, displayName } = req.body;
-
-  if (!username || !password) {
-    return res.status(400).send("Thiếu tên đăng nhập hoặc mật khẩu");
-  }
-
-  try {
-    const pool = await poolPromise;
-
-    // Kiểm tra trùng username
-    const check = await pool
-      .request()
-      .input("Username", sql.VarChar, username)
-      .query("SELECT 1 FROM dbo.TAIKHOAN WHERE Username = @Username");
-
-    if (check.recordset.length > 0) {
-      return res.status(409).send("Tên đăng nhập đã tồn tại!");
-    }
-
-    // Mã hóa mật khẩu (nếu đã cài bcryptjs, nếu chưa thì lưu thô tạm thời)
-    let passwordToSave = password;
-    try {
-      const bcrypt = require("bcryptjs"); // Đảm bảo bạn đã chạy: npm install bcryptjs
-      const salt = await bcrypt.genSalt(10);
-      passwordToSave = await bcrypt.hash(password, salt);
-    } catch (e) {
-      console.warn("Chưa cài bcryptjs, lưu mật khẩu dạng thô.");
-    }
-
-    await pool
-      .request()
-      .input("Username", sql.VarChar, username)
-      .input("PasswordHash", sql.VarChar, passwordToSave)
-      .input("Role", sql.VarChar, role || "user") // Lưu quyền hạn (admin/user)
-      .input("DisplayName", sql.NVarChar, displayName || username).query(`
-        INSERT INTO dbo.TAIKHOAN (Username, PasswordHash, Role, DisplayName)
-        VALUES (@Username, @PasswordHash, @Role, @DisplayName)
-      `);
-
-    res.status(201).send("Tạo tài khoản thành công");
-  } catch (err) {
-    handleSqlError(res, err);
-  }
-});
-
-// 3. Xóa tài khoản
-app.delete(
-  "/api/accounts/:username",
-  authenticate,
-  authorizeAdmin,
-  async (req, res) => {
-    const targetUser = req.params.username;
-
-    // Bảo vệ tài khoản admin gốc
-    if (targetUser === "admin") {
-      return res.status(400).send("Không thể xóa tài khoản Super Admin này!");
-    }
-
-    try {
-      const pool = await poolPromise;
-      await pool
-        .request()
-        .input("Username", sql.VarChar, targetUser)
-        .query("DELETE FROM dbo.TAIKHOAN WHERE Username = @Username");
-      res.send("Xóa tài khoản thành công");
-    } catch (err) {
-      handleSqlError(res, err);
-    }
-  },
-);
-
-/* --- KẾT THÚC ĐOẠN CODE API QUẢN LÝ TÀI KHOẢN --- */
-
 function authenticate(req, res, next) {
   const auth = req.headers["authorization"] || "";
 
@@ -465,6 +372,8 @@ const poolPromise = new sql.ConnectionPool(config)
           ALTER TABLE dbo.THIETBI ADD LastUserId VARCHAR(50) NULL;
         IF COL_LENGTH('dbo.THIETBI','LastAssignedDate') IS NULL
           ALTER TABLE dbo.THIETBI ADD LastAssignedDate DATE NULL;
+        IF COL_LENGTH('dbo.THIETBI','HinhAnhThucTe') IS NULL
+          ALTER TABLE dbo.THIETBI ADD HinhAnhThucTe NVARCHAR(255) NULL;
       `,
       )
       .then(() => console.log("✅ THIETBI.Last* columns ready"))
@@ -638,7 +547,10 @@ app.get("/api/devices", authenticate, async (_req, res) => {
     const result = await pool.request().query(`
       SELECT
         t.*,
-        kk.HinhAnhThucTe
+        -- [SỬA LẠI DÒNG NÀY] Ưu tiên lấy ảnh trong bảng THIETBI (ảnh mới upload)
+        -- Nếu không có thì mới lấy ảnh từ kiểm kê (kk)
+        -- Đổi tên thành HinhAnhHienThi để không bị trùng
+COALESCE(t.HinhAnhThucTe, kk.HinhAnhThucTe) as HinhAnhHienThi
       FROM dbo.THIETBI t
       LEFT JOIN (
         SELECT
@@ -960,7 +872,7 @@ app.post("/public/upload-image", (req, res) => {
         .json({ message: "Không có tệp nào được tải lên." });
     }
 
-    const { maThietBi, dotId } = req.body;
+    const { maThietBi, dotId, nhanVien } = req.body;
     if (!maThietBi || !dotId) {
       return res
         .status(400)
@@ -1101,318 +1013,161 @@ app.post("/api/devices", authenticate, async (req, res) => {
   }
 });
 
-// Sửa thiết bị
-app.put("/api/devices/:id", authenticate, async (req, res) => {
+/* ==============================================
+   API SỬA THIẾT BỊ (Đã chỉnh sửa logic)
+   ============================================== */
+app.put("/api/devices/:id", authenticate, upload, async (req, res) => {
   const { id } = req.params;
-  const {
+  let {
     TenThietBi,
     LoaiThietBi,
     SerialSN,
     NgayNhap,
     Trangthai,
-    Nguoisudung,
-    Ngaycap,
+    Nguoisudung, // Biến này lấy từ form
     Vitri,
-    MaThietBi: NewMaThietBi,
-  } = req.body || {};
+  } = req.body;
+
+  // Xử lý ảnh
+  let HinhAnhThucTe = req.body.HinhAnhThucTe;
+  if (req.file) {
+    // Sửa thành /public/upload/ để giống với API upload ảnh
+    HinhAnhThucTe = `/public/upload/${req.file.filename}`;
+  }
+
+  // [LOGIC MỚI - SỬA ĐỔI] -----------------------------------------------------
+  // Logic xử lý trạng thái và người dùng sẽ được dời xuống sau khi lấy dữ liệu cũ
+  // [LOGIC MỚI]
+  // 1. Nếu trạng thái là Sẵn sàng/Bảo hành/Hư hỏng -> Xóa người dùng (về NULL)
+  if (["Sẵn sàng", "Bảo Hành", "Hư Hỏng"].includes(Trangthai)) {
+    Nguoisudung = null;
+  }
+  // 2. Nếu không gửi Nguoisudung lên (undefined) -> Gán mặc định là null để tránh lỗi SQL
+  else if (Nguoisudung === undefined) {
+    Nguoisudung = null;
+  }
+
+  const pool = await poolPromise;
+  const transaction = new sql.Transaction(pool);
 
   try {
-    await runTx(async (tx) => {
-      const rGet = new sql.Request(tx);
-      const dRes = await rGet
+    await transaction.begin();
+
+    // 1. Lấy dữ liệu CŨ của thiết bị (để backup hoặc restore)
+    const oldDevRes = await transaction
+      .request()
+      .input("MaThietBi", sql.VarChar, id)
+      .query("SELECT * FROM THIETBI WHERE MaThietBi = @MaThietBi");
+
+    const oldDev = oldDevRes.recordset[0] || {};
+    let restoreDate = null; // Biến lưu ngày cấp cũ để khôi phục
+
+    // 2. BACKUP: Nếu đang dùng -> chuyển sang trạng thái khác (Bảo hành/Hư hỏng...)
+    // Thì lưu lại thông tin người dùng hiện tại và NGÀY CẤP hiện tại vào lịch sử
+    if (oldDev.Trangthai === "Đang sử dụng" && Trangthai !== "Đang sử dụng") {
+      // Lấy ngày cấp thực tế từ bảng NHANVIEN
+      const empRes = await transaction
+        .request()
         .input("MaThietBi", sql.VarChar, id)
-        .query("SELECT TOP 1 * FROM dbo.THIETBI WHERE MaThietBi=@MaThietBi");
-      if (!dRes.recordset.length) {
-        throw Object.assign(new Error("Không tìm thấy thiết bị"), {
-          http: 404,
-        });
-      }
-      const dev = dRes.recordset[0];
+        .query(
+          "SELECT TOP 1 MaNV, HoVaTen, Ngaycap FROM NHANVIEN WHERE Thietbisudung = @MaThietBi",
+        );
 
-      let targetId = id;
-      if (NewMaThietBi && NewMaThietBi !== id) {
-        const existNew = await new sql.Request(tx)
-          .input("NewId", sql.VarChar, NewMaThietBi)
-          .query("SELECT 1 FROM dbo.THIETBI WHERE MaThietBi=@NewId");
-        if (existNew.recordset.length) {
-          throw Object.assign(new Error("Mã thiết bị đã tồn tại."), {
-            http: 409,
-          });
-        }
-        await new sql.Request(tx)
-          .input("OldId", sql.VarChar, id)
-          .input("NewId", sql.VarChar, NewMaThietBi)
+      if (empRes.recordset.length > 0) {
+        const emp = empRes.recordset[0];
+        // Cập nhật cột Last* trong THIETBI để nhớ
+        await transaction
+          .request()
+          .input("MaThietBi", sql.VarChar, id)
+          .input("LastUserId", sql.VarChar, emp.MaNV)
+          .input("LastUserName", sql.NVarChar, emp.HoVaTen)
+          .input("LastAssignedDate", sql.Date, emp.Ngaycap) // Lưu ngày cấp cũ
           .query(
-            "UPDATE dbo.THIETBI SET MaThietBi=@NewId WHERE MaThietBi=@OldId",
-          );
-        await new sql.Request(tx)
-          .input("OldId", sql.VarChar, id)
-          .input("NewId", sql.VarChar, NewMaThietBi)
-          .query(
-            "UPDATE dbo.NHANVIEN SET Thietbisudung=@NewId WHERE Thietbisudung=@OldId",
-          );
-        targetId = NewMaThietBi;
-      }
-
-      async function updateDevice(finalState, finalUser) {
-        await new sql.Request(tx)
-          .input("MaThietBi", sql.VarChar, targetId)
-          .input("TenThietBi", sql.NVarChar, TenThietBi ?? dev.TenThietBi ?? "")
-          .input(
-            "LoaiThietBi",
-            sql.NVarChar,
-            LoaiThietBi ?? dev.LoaiThietBi ?? "",
-          )
-          .input(
-            "SerialSN",
-            sql.VarChar(100),
-            normalizeSerialSN(SerialSN ?? dev.SerialSN) || "",
-          )
-          .input("NgayNhap", sql.Date, NgayNhap ?? dev.NgayNhap ?? null)
-          .input("Trangthai", sql.NVarChar, finalState)
-          .input("Nguoisudung", sql.NVarChar, finalUser ?? null)
-          .input("Vitri", sql.NVarChar, Vitri ?? dev.Vitri ?? null)
-          .query(
-            `UPDATE dbo.THIETBI SET 
-         TenThietBi=@TenThietBi,
-         LoaiThietBi=@LoaiThietBi,
-         SerialSN=@SerialSN,
-         NgayNhap=@NgayNhap,
-         Trangthai=@Trangthai,
-         Nguoisudung=@Nguoisudung,
-         Vitri=@Vitri,
-         LastUserName=COALESCE(@Nguoisudung, LastUserName)
-       WHERE MaThietBi=@MaThietBi`,
+            `UPDATE THIETBI SET LastUserId=@LastUserId, LastUserName=@LastUserName, LastAssignedDate=@LastAssignedDate WHERE MaThietBi=@MaThietBi`,
           );
       }
+    }
 
-      const wantState =
-        typeof Trangthai !== "undefined" && Trangthai ? Trangthai : null;
-
-      // Chuyển sang Bảo Hành/Hư Hỏng => gỡ gán
-      if (wantState === "Bảo Hành" || wantState === "Hư Hỏng") {
-        const cu = await new sql.Request(tx)
-          .input("DevId", sql.VarChar, targetId)
-          .query(
-            "SELECT TOP 1 MaNV, HoVaTen, Ngaycap FROM dbo.NHANVIEN WHERE Thietbisudung=@DevId",
-          );
-        if (cu.recordset.length) {
-          const r = cu.recordset[0];
-          await new sql.Request(tx)
-            .input("MaThietBi", sql.VarChar, targetId)
-            .input("LastUserId", sql.VarChar, r.MaNV)
-            .input("LastUserName", sql.NVarChar, r.HoVaTen)
-            .input("LastAssignedDate", sql.Date, r.Ngaycap || null)
-            .query(
-              "UPDATE dbo.THIETBI SET LastUserId=@LastUserId, LastUserName=@LastUserName, LastAssignedDate=@LastAssignedDate WHERE MaThietBi=@MaThietBi",
-            );
-        } else if (dev.Nguoisudung) {
-          await new sql.Request(tx)
-            .input("MaThietBi", sql.VarChar, targetId)
-            .input("LastUserName", sql.NVarChar, dev.Nguoisudung)
-            .query(
-              "UPDATE dbo.THIETBI SET LastUserName=@LastUserName WHERE MaThietBi=@MaThietBi",
-            );
-        }
-
-        await updateDevice(wantState, null);
-        await new sql.Request(tx)
-          .input("DevId", sql.VarChar, targetId)
-          .query(
-            "UPDATE dbo.NHANVIEN SET Thietbisudung=NULL, Ngaycap=NULL, Trangthai=N'Chưa cấp' WHERE Thietbisudung=@DevId",
-          );
-        return;
-      }
-
-      // Thay đổi Nguoisudung?
-      if (typeof Nguoisudung !== "undefined") {
-        if (!Nguoisudung) {
-          // Bỏ gán
-          if (wantState === "Đang sử dụng") {
-            const prevId = dev.LastUserId || null;
-            if (prevId) {
-              await updateDevice(
-                "Đang sử dụng",
-                dev.Nguoisudung || dev.LastUserName || null,
-              );
-              await new sql.Request(tx)
-                .input("MaNV", sql.VarChar, prevId)
-                .input("DevId", sql.VarChar, targetId)
-                .input(
-                  "LastAssignedDate",
-                  sql.Date,
-                  dev.LastAssignedDate || null,
-                )
-                .query(
-                  "UPDATE dbo.NHANVIEN SET Thietbisudung=@DevId, Ngaycap=COALESCE(@LastAssignedDate, Ngaycap, GETDATE()), Trangthai=N'Đang sử dụng' WHERE MaNV=@MaNV",
-                );
-              await new sql.Request(tx)
-                .input("DevId", sql.VarChar, targetId)
-                .input("MaNV", sql.VarChar, prevId)
-                .query(
-                  "UPDATE dbo.THIETBI SET LastUserId=@MaNV WHERE MaThietBi=@DevId",
-                );
-            } else {
-              const prevName = dev.Nguoisudung || dev.LastUserName || null;
-              if (prevName) {
-                await updateDevice("Đang sử dụng", prevName);
-                const prevUser = await findUserByIdOrName(tx, String(prevName));
-                if (prevUser) {
-                  await new sql.Request(tx)
-                    .input("MaNV", sql.VarChar, prevUser.MaNV)
-                    .input("DevId", sql.VarChar, targetId)
-                    .input(
-                      "LastAssignedDate",
-                      sql.Date,
-                      dev.LastAssignedDate || null,
-                    )
-                    .query(
-                      "UPDATE dbo.NHANVIEN SET Thietbisudung=@DevId, Ngaycap=COALESCE(@LastAssignedDate, Ngaycap, GETDATE()), Trangthai=N'Đang sử dụng' WHERE MaNV=@MaNV",
-                    );
-                  await new sql.Request(tx)
-                    .input("DevId", sql.VarChar, targetId)
-                    .input("MaNV", sql.VarChar, prevUser.MaNV)
-                    .query(
-                      "UPDATE dbo.THIETBI SET LastUserId=@MaNV WHERE MaThietBi=@DevId",
-                    );
-                }
-              } else {
-                await updateDevice("Sẵn sàng", null);
-              }
-            }
-          } else {
-            await updateDevice("Sẵn sàng", null);
-            await new sql.Request(tx)
-              .input("DevId", sql.VarChar, targetId)
-              .query(
-                "UPDATE dbo.NHANVIEN SET Thietbisudung=NULL, Ngaycap=NULL, Trangthai=N'Chưa cấp' WHERE Thietbisudung=@DevId",
-              );
-          }
-        } else {
-          // Gán theo MaNV hoặc HoVaTen
-          const user = await findUserByIdOrName(tx, String(Nguoisudung));
-          if (!user) {
-            throw Object.assign(
-              new Error("Không tìm thấy người dùng tương ứng"),
-              {
-                http: 400,
-              },
-            );
-          }
-          if (dev.Trangthai === "Bảo Hành" || dev.Trangthai === "Hư Hỏng") {
-            throw Object.assign(
-              new Error("Thiết bị không sẵn sàng (Bảo Hành/Hư Hỏng)"),
-              { http: 409 },
-            );
-          }
-
-          await new sql.Request(tx)
-            .input("DevId", sql.VarChar, targetId)
-            .input("MaNV", sql.VarChar, user.MaNV)
-            .query(
-              "UPDATE dbo.NHANVIEN SET Thietbisudung=NULL, Ngaycap=NULL, Trangthai=N'Chưa cấp' WHERE Thietbisudung=@DevId AND MaNV<>@MaNV",
-            );
-
-          if (user.Thietbisudung && user.Thietbisudung !== targetId) {
-            await new sql.Request(tx)
-              .input("PrevDev", sql.VarChar, user.Thietbisudung)
-              .query(
-                "UPDATE dbo.THIETBI SET Trangthai=N'Sẵn sàng', Nguoisudung=NULL WHERE MaThietBi=@PrevDev",
-              );
-          }
-
-          await new sql.Request(tx)
-            .input("MaNV", sql.VarChar, user.MaNV)
-            .input("MaThietBi", sql.VarChar, targetId)
-            .input("Ngaycap", sql.Date, Ngaycap || null)
-            .query(
-              "UPDATE dbo.NHANVIEN SET Thietbisudung=@MaThietBi, Ngaycap=COALESCE(@Ngaycap, Ngaycap, GETDATE()), Trangthai=N'Đang sử dụng' WHERE MaNV=@MaNV",
-            );
-
-          await updateDevice("Đang sử dụng", user.HoVaTen);
-          await new sql.Request(tx)
-            .input("DevId", sql.VarChar, targetId)
-            .input("MaNV", sql.VarChar, user.MaNV)
-            .query(
-              "UPDATE dbo.THIETBI SET LastUserId=@MaNV WHERE MaThietBi=@DevId",
-            );
-        }
+    // 3. RESTORE: Nếu chuyển về "Đang sử dụng" mà KHÔNG chọn người (Nguoisudung rỗng)
+    // Thì tự động lấy lại người cũ và ngày cấp cũ
+    if (Trangthai === "Đang sử dụng" && !Nguoisudung) {
+      if (oldDev.LastUserName) {
+        Nguoisudung = oldDev.LastUserName; // Khôi phục tên người
+        restoreDate = oldDev.LastAssignedDate; // Khôi phục ngày cấp
+        console.log(
+          `♻️ Khôi phục thiết bị ${id} cho ${Nguoisudung} vào ngày ${restoreDate}`,
+        );
       } else {
-        // Không đổi người dùng, chỉ đổi info/trạng thái
-        const finalState =
-          wantState ?? (dev.Nguoisudung ? "Đang sử dụng" : "Sẵn sàng");
-
-        if (finalState === "Sẵn sàng") {
-          await updateDevice("Sẵn sàng", null);
-          await new sql.Request(tx)
-            .input("DevId", sql.VarChar, targetId)
-            .query(
-              "UPDATE dbo.NHANVIEN SET Thietbisudung=NULL, Ngaycap=NULL, Trangthai=N'Chưa cấp' WHERE Thietbisudung=@DevId",
-            );
-        } else if (finalState === "Đang sử dụng") {
-          const prevId = dev.LastUserId || null;
-          if (prevId) {
-            await updateDevice(
-              "Đang sử dụng",
-              dev.Nguoisudung || dev.LastUserName || null,
-            );
-            await new sql.Request(tx)
-              .input("MaNV", sql.VarChar, prevId)
-              .input("DevId", sql.VarChar, targetId)
-              .input("LastAssignedDate", sql.Date, dev.LastAssignedDate || null)
-              .query(
-                "UPDATE dbo.NHANVIEN SET Thietbisudung=@DevId, Ngaycap=COALESCE(@LastAssignedDate, Ngaycap, GETDATE()), Trangthai=N'Đang sử dụng' WHERE MaNV=@MaNV",
-              );
-            await new sql.Request(tx)
-              .input("DevId", sql.VarChar, targetId)
-              .input("MaNV", sql.VarChar, prevId)
-              .query(
-                "UPDATE dbo.THIETBI SET LastUserId=@MaNV WHERE MaThietBi=@DevId",
-              );
-          } else {
-            const prevName = dev.Nguoisudung || dev.LastUserName || null;
-            await updateDevice("Đang sử dụng", prevName);
-            if (prevName) {
-              const prevUser = await findUserByIdOrName(tx, String(prevName));
-              if (prevUser) {
-                await new sql.Request(tx)
-                  .input("MaNV", sql.VarChar, prevUser.MaNV)
-                  .input("DevId", sql.VarChar, targetId)
-                  .input(
-                    "LastAssignedDate",
-                    sql.Date,
-                    dev.LastAssignedDate || null,
-                  )
-                  .query(
-                    "UPDATE dbo.NHANVIEN SET Thietbisudung=@DevId, Ngaycap=COALESCE(@LastAssignedDate, Ngaycap, GETDATE()), Trangthai=N'Đang sử dụng' WHERE MaNV=@MaNV",
-                  );
-                await new sql.Request(tx)
-                  .input("DevId", sql.VarChar, targetId)
-                  .input("MaNV", sql.VarChar, prevUser.MaNV)
-                  .query(
-                    "UPDATE dbo.THIETBI SET LastUserId=@MaNV WHERE MaThietBi=@DevId",
-                  );
-              } else {
-                await new sql.Request(tx)
-                  .input("DevId", sql.VarChar, targetId)
-                  .query(
-                    "UPDATE dbo.NHANVIEN SET Trangthai=N'Đang sử dụng' WHERE Thietbisudung=@DevId",
-                  );
-              }
-            }
-          }
-        } else {
-          await updateDevice(finalState, dev.Nguoisudung);
-        }
+        throw new Error(
+          "Không tìm thấy lịch sử người dùng cũ để khôi phục. Vui lòng chọn người sử dụng thủ công.",
+        );
       }
-    });
+    }
 
-    res.send("Cập nhật thiết bị thành công");
+    // Cập nhật bảng THIETBI
+    await transaction
+      .request()
+      .input("MaThietBi", sql.VarChar, id)
+      .input("TenThietBi", sql.NVarChar, TenThietBi)
+      .input("LoaiThietBi", sql.NVarChar, LoaiThietBi)
+      .input("SerialSN", sql.VarChar, SerialSN)
+      .input("NgayNhap", sql.Date, NgayNhap)
+      .input("Trangthai", sql.NVarChar, Trangthai)
+      .input("Nguoisudung", sql.NVarChar, Nguoisudung)
+      .input("Vitri", sql.NVarChar, Vitri)
+      .input("HinhAnhThucTe", sql.NVarChar, HinhAnhThucTe).query(`
+          UPDATE THIETBI
+          SET TenThietBi = @TenThietBi,
+              LoaiThietBi = @LoaiThietBi,
+              SerialSN = @SerialSN,
+              NgayNhap = @NgayNhap,
+              Trangthai = @Trangthai,
+              Nguoisudung = @Nguoisudung,
+              Vitri = @Vitri,
+              HinhAnhThucTe = @HinhAnhThucTe
+          WHERE MaThietBi = @MaThietBi
+        `);
+
+    // [BẮT ĐẦU ĐOẠN CODE CẦN THÊM/SỬA] ========================================
+
+    // LOGIC ĐỒNG BỘ SANG BẢNG NHÂN VIÊN (Quan trọng)
+
+    // Bước 1: Luôn gỡ thiết bị này khỏi người cũ (để tránh 1 thiết bị 2 chủ)
+    await transaction.request().input("MaThietBi", sql.VarChar, id).query(`
+        UPDATE NHANVIEN 
+        SET Thietbisudung = NULL, Ngaycap = NULL, Trangthai = N'Chưa cấp'
+        WHERE Thietbisudung = @MaThietBi
+      `);
+
+    // Bước 2: Nếu trạng thái mới là "Đang sử dụng" -> Gán cho người mới & CẬP NHẬT NGÀY CẤP MỚI
+    if (Trangthai === "Đang sử dụng" && Nguoisudung) {
+      await transaction
+        .request()
+        .input("TenNV", sql.NVarChar, Nguoisudung) // Nguoisudung lấy từ form (Frontend gửi lên)
+        .input("MaThietBi", sql.VarChar, id)
+        .input("RestoreDate", sql.Date, restoreDate) // Truyền ngày khôi phục (nếu có)
+        .query(`
+          UPDATE NHANVIEN 
+          SET Thietbisudung = @MaThietBi, 
+              Ngaycap = COALESCE(@RestoreDate, GETDATE()), -- Ưu tiên ngày cũ, nếu không có thì lấy ngày hiện tại
+              Trangthai = N'Đang sử dụng'
+          WHERE HoVaTen = @TenNV OR MaNV = @TenNV -- Tìm đúng nhân viên để gán
+        `);
+    }
+    // [KẾT THÚC ĐOẠN CODE CẦN THÊM/SỬA] =======================================
+    await transaction.commit();
+    res.json({ message: "Cập nhật thành công", success: true });
   } catch (err) {
-    if (err?.http) return res.status(err.http).send(err.message);
+    if (transaction._aborted === false) {
+      await transaction.rollback();
+    }
+    console.error("Lỗi khi cập nhật:", err);
     handleSqlError(res, err);
   }
 });
+/* ==============================================
+   KẾT THÚC ĐOẠN CODE MỚI
+   ============================================== */
 
 // Xóa thiết bị
 app.delete(

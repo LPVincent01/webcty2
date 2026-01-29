@@ -243,82 +243,128 @@
             style="display: none"
           >
             <div class="table-container">
-              <div class="table-header">
-                <h3 class="table-title">Danh sách thiết bị</h3>
-                <div class="table-filters">
-                  <input
-                    type="text"
-                    id="deviceSearchInput"
-                    placeholder="Tìm kiếm theo tên, mã, S/N..."
-                  />
-                  <select id="deviceStatusFilter">
-                    <option value="" data-i18n="allStatuses">
-                      Tất cả trạng thái
-                    </option>
-                    <option value="Đang sử dụng" data-i18n="status_in_use">
-                      Đang sử dụng
-                    </option>
-                    <option value="Sẵn sàng" data-i18n="status_available">
-                      Sẵn sàng
-                    </option>
-                    <option value="Bảo Hành" data-i18n="status_warranty">
-                      Bảo Hành
-                    </option>
-                    <option value="Hư Hỏng" data-i18n="status_broken">
-                      Hư Hỏng
-                    </option>
-                  </select>
+              <div
+                class="table-header"
+                style="padding-bottom: 0; border-bottom: none"
+              >
+                <div class="table-filters" style="flex-grow: 1">
+                  <div
+                    style="position: relative; width: 100%; max-width: 400px"
+                  >
+                    <i
+                      class="fas fa-search"
+                      style="
+                        position: absolute;
+                        left: 12px;
+                        top: 50%;
+                        transform: translateY(-50%);
+                        color: #94a3b8;
+                      "
+                    ></i>
+                    <input
+                      type="text"
+                      id="deviceSearchInput"
+                      placeholder="Tìm kiếm mã, tên, serial..."
+                      style="
+                        padding-left: 36px;
+                        width: 100%;
+                        border-radius: 8px;
+                      "
+                    />
+                  </div>
+                  <select
+                    id="deviceStatusFilter"
+                    style="display: none"
+                  ></select>
                 </div>
+
                 <div class="table-actions">
-                  <!-- Input file ẩn để chọn Excel -->
                   <input
                     type="file"
                     id="importDevicesExcelInput"
                     accept=".xlsx,.xls"
                     style="display: none"
                   />
-
                   <button
                     class="btn btn-secondary"
                     id="importDevicesExcelBtn"
                     data-i18n="importExcel"
                   >
-                    <i class="fas fa-file-import"></i> Nhập Excel
+                    <i class="fas fa-file-import"></i>
+                    <span class="mobile-hide">Nhập Excel</span>
                   </button>
                   <button class="btn btn-primary" id="addDeviceBtn">
-                    <i class="fas fa-plus"></i> Thêm thiết bị
+                    <i class="fas fa-plus"></i>
+                    <span class="mobile-hide">Thêm thiết bị</span>
                   </button>
                   <button class="btn btn-success" id="exportDevicesExcelBtn">
-                    <i class="fas fa-file-excel"></i> Xuất Excel
+                    <i class="fas fa-file-excel"></i>
+                    <span class="mobile-hide">Xuất Excel</span>
                   </button>
                 </div>
               </div>
+
+              <div style="padding: 0 20px">
+                <div class="status-tabs-container" id="deviceStatusTabs">
+                  <button
+                    class="status-tab active"
+                    onclick="filterDeviceByTab('')"
+                  >
+                    Tất cả <span class="status-count" id="count-all">0</span>
+                  </button>
+                  <button
+                    class="status-tab"
+                    onclick="filterDeviceByTab('Sẵn sàng')"
+                  >
+                    Sẵn sàng
+                    <span class="status-count" id="count-available">0</span>
+                  </button>
+                  <button
+                    class="status-tab"
+                    onclick="filterDeviceByTab('Đang sử dụng')"
+                  >
+                    Đang sử dụng
+                    <span class="status-count" id="count-inuse">0</span>
+                  </button>
+                  <button
+                    class="status-tab"
+                    onclick="filterDeviceByTab('Bảo Hành')"
+                  >
+                    Bảo hành
+                    <span class="status-count" id="count-maintenance">0</span>
+                  </button>
+                  <button
+                    class="status-tab"
+                    onclick="filterDeviceByTab('Hư Hỏng')"
+                  >
+                    Hư hỏng
+                    <span class="status-count" id="count-broken">0</span>
+                  </button>
+                </div>
+              </div>
+
               <table id="devicesTable">
                 <colgroup>
                   <col style="width: 100px" />
-                  <col style="width: 120px" />
-                  <col style="width: 220px" />
-                  <col style="width: 140px" />
+                  <col style="width: 180px" />
                   <col style="width: 140px" />
                   <col style="width: 120px" />
                   <col style="width: 120px" />
+                  <col style="width: 140px" />
+                  <col style="width: 150px" />
+                  <col style="width: 120px" />
+                  <col style="width: 90px" />
                   <col style="width: 100px" />
-                  <col style="width: 120px" />
-                  <!-- Vị trí -->
-                  <!-- Điều chỉnh độ rộng cột cho hình ảnh -->
-                  <col style="width: 110px" />
                 </colgroup>
                 <thead>
                   <tr>
-                    <th class="sortable" data-sort-key="MaThietBi">
-                      Mã thiết bị
-                    </th>
+                    <th class="sortable" data-sort-key="MaThietBi">Mã TB</th>
                     <th
                       class="sortable"
                       data-sort-key="TenThietBi"
                       data-i18n="deviceName"
                     >
-                      Tên thiết bị
+                      MODEL
                     </th>
                     <th
                       class="sortable"
@@ -327,9 +373,7 @@
                     >
                       Loại thiết bị
                     </th>
-                    <th class="sortable" data-sort-key="SerialSN">
-                      Serial(S/N)
-                    </th>
+                    <th class="sortable" data-sort-key="SerialSN">S/N</th>
                     <th class="sortable" data-sort-key="NgayNhap">Ngày nhập</th>
                     <th class="sortable" data-sort-key="Trangthai">
                       Trạng thái
@@ -342,9 +386,7 @@
                     <th>Thao tác</th>
                   </tr>
                 </thead>
-                <tbody id="devicesTableBody">
-                  <!-- Devices will be loaded here -->
-                </tbody>
+                <tbody id="devicesTableBody"></tbody>
               </table>
               <div class="pagination-container" id="devicesPagination"></div>
             </div>
@@ -357,15 +399,43 @@
             style="display: none"
           >
             <div class="table-container">
-              <div class="table-header">
-                <h3 class="table-title">Danh sách người sử dụng</h3>
-                <div class="table-filters">
-                  <input
-                    type="text"
-                    id="userSearchInput"
-                    placeholder="Tìm kiếm theo tên, mã NV..."
-                  />
-                  <select id="userDepartmentFilter">
+              <div
+                class="table-header"
+                style="padding-bottom: 0; border-bottom: none"
+              >
+                <div class="table-filters" style="flex-grow: 1">
+                  <div
+                    style="position: relative; width: 100%; max-width: 400px"
+                  >
+                    <i
+                      class="fas fa-search"
+                      style="
+                        position: absolute;
+                        left: 12px;
+                        top: 50%;
+                        transform: translateY(-50%);
+                        color: #94a3b8;
+                      "
+                    ></i>
+                    <input
+                      type="text"
+                      id="userSearchInput"
+                      placeholder="Tìm kiếm theo tên, mã NV..."
+                      style="
+                        padding-left: 36px;
+                        width: 100%;
+                        border-radius: 8px;
+                      "
+                    />
+                  </div>
+                  <select
+                    id="userDepartmentFilter"
+                    style="
+                      border-radius: 8px;
+                      border: 1px solid #ddd;
+                      padding: 0.5rem;
+                    "
+                  >
                     <option value="" data-i18n="allDepartments">
                       Tất cả phòng ban
                     </option>
@@ -427,32 +497,59 @@
                     </option>
                   </select>
                 </div>
+
                 <div class="table-actions">
-                  <!-- Ẩn input chọn file Excel -->
                   <input
                     type="file"
                     id="importUsersExcelInput"
                     accept=".xlsx,.xls"
                     style="display: none"
                   />
-
-                  <!-- Nút Nhập Excel -->
                   <button
                     class="btn btn-secondary"
                     id="importUsersExcelBtn"
                     data-i18n="importExcel"
                   >
-                    <i class="fas fa-file-import"></i> Nhập Excel
+                    <i class="fas fa-file-import"></i>
+                    <span class="mobile-hide">Nhập Excel</span>
                   </button>
-
                   <button class="btn btn-primary" id="addUserBtn">
-                    <i class="fas fa-plus"></i> Thêm người dùng
+                    <i class="fas fa-plus"></i>
+                    <span class="mobile-hide">Thêm người dùng</span>
                   </button>
                   <button class="btn btn-success" id="exportUsersExcelBtn">
-                    <i class="fas fa-file-excel"></i> Xuất Excel
+                    <i class="fas fa-file-excel"></i>
+                    <span class="mobile-hide">Xuất Excel</span>
                   </button>
                 </div>
               </div>
+
+              <div style="padding: 0 20px">
+                <div class="status-tabs-container" id="userStatusTabs">
+                  <button
+                    class="status-tab active"
+                    onclick="filterUserByTab('')"
+                  >
+                    Tất cả
+                    <span class="status-count" id="count-user-all">0</span>
+                  </button>
+                  <button
+                    class="status-tab"
+                    onclick="filterUserByTab('Đang sử dụng')"
+                  >
+                    Đang sử dụng
+                    <span class="status-count" id="count-user-inuse">0</span>
+                  </button>
+                  <button
+                    class="status-tab"
+                    onclick="filterUserByTab('Chưa cấp')"
+                  >
+                    Chưa cấp
+                    <span class="status-count" id="count-user-empty">0</span>
+                  </button>
+                </div>
+              </div>
+
               <table id="usersTable">
                 <colgroup>
                   <col style="width: 110px" />
@@ -484,9 +581,7 @@
                     <th>Thao tác</th>
                   </tr>
                 </thead>
-                <tbody id="usersTableBody">
-                  <!-- Users will be loaded here -->
-                </tbody>
+                <tbody id="usersTableBody"></tbody>
               </table>
               <div class="pagination-container" id="usersPagination"></div>
             </div>
@@ -500,27 +595,40 @@
           >
             <div class="table-container">
               <div class="table-header">
-                <div>
-                  <h3 class="table-title" data-i18n="purchaseInfo">
-                    Thông tin mua hàng
-                  </h3>
-                  <p
-                    class="section-description"
-                    data-i18n="purchaseHistoryDescription"
+                <div class="table-filters" style="flex-grow: 1">
+                  <div
+                    style="position: relative; width: 100%; max-width: 400px"
                   >
-                    Lịch sử mua sắm của từng thiết bị (giá trị và nguồn mua)
-                  </p>
-                </div>
-
-                <!-- Filters + Buttons, giống cấu trúc devices -->
-                <div class="table-filters">
-                  <input
-                    type="text"
-                    id="purchaseSearchInput"
-                    placeholder="Tìm theo mã / tên thiết bị"
-                    data-i18n-placeholder="searchByDeviceCodeName"
-                  />
-                  <select id="purchaseSourceFilter">
+                    <i
+                      class="fas fa-search"
+                      style="
+                        position: absolute;
+                        left: 12px;
+                        top: 50%;
+                        transform: translateY(-50%);
+                        color: #94a3b8;
+                      "
+                    ></i>
+                    <input
+                      type="text"
+                      id="purchaseSearchInput"
+                      placeholder="Tìm theo mã / tên thiết bị"
+                      data-i18n-placeholder="searchByDeviceCodeName"
+                      style="
+                        padding-left: 36px;
+                        width: 100%;
+                        border-radius: 8px;
+                      "
+                    />
+                  </div>
+                  <select
+                    id="purchaseSourceFilter"
+                    style="
+                      border-radius: 8px;
+                      border: 1px solid #ddd;
+                      padding: 0.5rem;
+                    "
+                  >
                     <option value="" data-i18n="allPurchaseSources">
                       Tất cả nguồn mua
                     </option>
@@ -538,19 +646,21 @@
                     id="addPurchaseBtn"
                     data-i18n="addPurchaseInfo"
                   >
-                    Thêm thông tin mua hàng
+                    <i class="fas fa-plus"></i>
+                    <span class="mobile-hide">Thêm mới</span>
                   </button>
                   <button
                     class="btn btn-success"
                     id="exportPurchasesExcelBtn"
                     data-i18n="exportExcel"
                   >
-                    Xuất Excel
+                    <i class="fas fa-file-excel"></i>
+                    <span class="mobile-hide">Xuất Excel</span>
                   </button>
                 </div>
               </div>
 
-              <table class="data-table" id="purchasesTable">
+              <table id="purchasesTable">
                 <colgroup>
                   <col style="width: 15%" />
                   <col style="width: 25%" />
@@ -574,7 +684,7 @@
                       data-sort-key="TenThietBi"
                       data-i18n="deviceName"
                     >
-                      Tên thiết bị
+                      Model
                     </th>
                     <th
                       class="sortable"
@@ -607,11 +717,8 @@
                     <th data-i18n="actions">Thao tác</th>
                   </tr>
                 </thead>
-                <tbody id="purchasesTableBody">
-                  <!-- dữ liệu sẽ được load bằng JS -->
-                </tbody>
+                <tbody id="purchasesTableBody"></tbody>
               </table>
-
               <div class="pagination-container" id="purchasesPagination"></div>
             </div>
           </section>
@@ -1087,6 +1194,18 @@
               <input type="text" id="purchaseSource" placeholder="VN, CN,..." />
             </div>
           </form>
+        </div>
+        <div class="modal-footer">
+          <button
+            class="btn btn-danger"
+            id="cancelPurchaseBtn"
+            data-i18n="cancel"
+          >
+            Hủy
+          </button>
+          <button class="btn btn-success" id="savePurchaseBtn" data-i18n="save">
+            Lưu
+          </button>
         </div>
       </div>
     </div>

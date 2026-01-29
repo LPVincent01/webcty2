@@ -1111,3 +1111,135 @@ table tbody tr:hover {
 .toggle-icon:hover {
   color: #000;
 }
+
+/* =======================================================
+   GIAO DIỆN MODERN DASHBOARD (Thêm vào cuối file style.css)
+   ======================================================= */
+
+/* 1. Tabs Trạng Thái */
+.status-tabs-container {
+  display: flex;
+  gap: 24px;
+  border-bottom: 1px solid #e2e8f0;
+  margin-bottom: 0;
+  padding-bottom: 0;
+  overflow-x: auto;
+}
+
+.status-tab {
+  background: none;
+  border: none;
+  padding: 12px 4px;
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: #64748b;
+  cursor: pointer;
+  position: relative;
+  white-space: nowrap;
+  transition: color 0.2s;
+}
+
+.status-tab:hover {
+  color: var(--primary-color);
+}
+
+.status-tab.active {
+  color: var(--primary-color);
+  font-weight: 700;
+}
+
+.status-tab.active::after {
+  content: "";
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background-color: var(--primary-color);
+}
+
+.status-count {
+  background-color: #f1f5f9;
+  color: #475569;
+  padding: 2px 8px;
+  border-radius: 99px;
+  font-size: 0.75rem;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
+.status-tab.active .status-count {
+  background-color: var(--primary-color);
+  color: white;
+}
+
+/* 2. Bảng Hiện Đại */
+.table-container {
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+  border-radius: 12px;
+  background: white;
+  overflow: hidden;
+}
+
+/* =======================================================
+   2. Bảng Hiện Đại (Áp dụng cho TOÀN BỘ bảng)
+   ======================================================= */
+.table-container {
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+  border-radius: 12px;
+  background: white;
+  overflow: hidden;
+}
+
+/* Áp dụng cho Header của TẤT CẢ các bảng bên trong .table-container */
+.table-container table thead th {
+  background-color: #f8fafc;
+  color: #475569;
+  font-weight: 700; /* Đậm hơn chút cho rõ */
+  text-transform: uppercase; /* Tự động viết hoa tiêu đề */
+  font-size: 0.75rem; /* Font nhỏ gọn giống thiết kế */
+  padding: 16px;
+  border-bottom: 1px solid #e2e8f0;
+  white-space: nowrap;
+}
+
+/* Áp dụng cho Body của TẤT CẢ các bảng */
+.table-container table tbody td {
+  padding: 14px 16px;
+  border-bottom: 1px solid #f1f5f9;
+  color: #334155;
+  font-size: 0.9rem;
+  vertical-align: middle;
+}
+
+.table-container table tbody tr:hover {
+  background-color: #f8fafc;
+}
+
+/* Căn chỉnh lại icon trong bảng cho đẹp */
+.action-btns button {
+  padding: 4px 8px;
+  margin: 0 2px;
+}
+
+#devicesTable tbody td {
+  padding: 14px 16px;
+  border-bottom: 1px solid #f1f5f9;
+  color: #334155;
+  font-size: 0.9rem;
+}
+
+#devicesTable tbody tr:hover {
+  background-color: #f8fafc;
+}
+
+/* 3. Badge Trạng Thái (Nhỏ gọn hơn) */
+.status-badge {
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-weight: 600;
+  font-size: 0.75rem;
+  text-transform: capitalize;
+}

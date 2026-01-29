@@ -439,7 +439,8 @@ let userSort = { key: "MaNV", order: "asc" };
 let purchasesSort = { key: "MaThietBi", order: "asc" }; // 👈 thêm dòng này
 window.currentRole = null;
 window.currentUsername = null;
-let deviceCurrentPage = 1;
+let currentTabStatus = ""; //
+let currentUserTabStatus = ""; // [MỚI] Cho người dùng Biến lưu trạng thái Tab hiện tại (Rỗng = Tất cả)
 let userCurrentPage = 1;
 const ROWS_PER_PAGE = 10;
 // Bộ lọc tháng cho Danh sách thiết bị (lọc theo Ngày nhập)
@@ -449,9 +450,14 @@ let currentLang = localStorage.getItem("lang") || "vi";
 /***********************
  * LOAD DATA
  ***********************/
+/* =========================================
+   1. HÀM TẢI DỮ LIỆU THIẾT BỊ (ĐÃ CẬP NHẬT)
+   ========================================= */
 async function loadDevices() {
   const data = await fetchJson("/api/devices");
   if (!data) return;
+
+  // Chuẩn hóa dữ liệu
   devices = data
     .map((d) => ({
       ...d,
@@ -459,13 +465,19 @@ async function loadDevices() {
     }))
     .sort((a, b) => a.MaThietBi.localeCompare(b.MaThietBi));
 
+  // [QUAN TRỌNG] Tính toán số lượng cho các Tabs trạng thái ngay khi tải xong
+  updateDeviceStatusCounts();
+
+  // Hiển thị dữ liệu ra bảng
   applyFiltersAndRender();
 }
 async function loadUsers() {
   const data = await fetchJson("/api/users");
   if (!data) return;
   users = data.sort((a, b) => a.MaNV.localeCompare(b.MaNV));
-  applyFiltersAndRender();
+
+  updateUserStats(); // [MỚI] Cập nhật số lượng trên Tab Users
+  applyUserFiltersAndRender(); // [MỚI] Gọi hàm render thông minh
 }
 
 async function loadPurchases() {
@@ -484,7 +496,10 @@ async function loadPurchases() {
 }
 
 async function loadAllData() {
-  await Promise.all([loadDevices(), loadUsers(), loadPurchases()]);
+  // Dùng Promise.allSettled để nếu 1 cái lỗi, các cái khác vẫn chạy
+  await Promise.allSettled([loadDevices(), loadUsers(), loadPurchases()]);
+
+  // Cập nhật số liệu Dashboard sau khi tải xong
   updateStats();
   initCharts();
 }
@@ -557,46 +572,64 @@ async function populateDeviceDropdownForPurchase() {
 /***********************
  * RENDER TABLES
  ***********************/
-function renderDevicesTable(filteredDevices) {
-  const dataToRender = filteredDevices || devices;
-  devicesTableBody.innerHTML = "";
-  dataToRender.forEach((d) => {
-    const actions =
-      window.currentRole === "admin"
-        ? /*html*/ `<div class="action-btns">
+function renderDevicesTable(dataToRender) {
+  // Nếu không có dữ liệu thì hiển thị thông báo
+  if (!dataToRender || dataToRender.length === 0) {
+    devicesTableBody.innerHTML =
+      '<tr><td colspan="10" style="text-align:center; padding: 20px;">Không có dữ liệu</td></tr>';
+    return;
+  }
+
+  // Sử dụng map để tạo chuỗi HTML nhanh hơn
+  const htmlRows = dataToRender
+    .map((d) => {
+      const actions =
+        window.currentRole === "admin"
+          ? `<div class="action-btns">
              <button class="btn btn-primary btn-sm" onclick="editDevice('${d.MaThietBi}')"><i class="fas fa-edit"></i></button>
              <button class="btn btn-danger btn-sm" onclick="confirmDelete('device','${d.MaThietBi}')"><i class="fas fa-trash"></i></button>
            </div>`
-        : /*html*/ `<div class="action-btns">
+          : `<div class="action-btns">
              <button class="btn btn-primary btn-sm" onclick="editDevice('${d.MaThietBi}')"><i class="fas fa-edit"></i></button>
            </div>`;
-    const name = d.TenThietBi || d.Model || ""; // 👈 THÊM DÒNG NÀY
-    devicesTableBody.innerHTML += `
+
+      // Ưu tiên hiển thị TenThietBi, nếu không có thì lấy Model
+      const name = d.TenThietBi || d.Model || "";
+
+      // [BẮT ĐẦU SỬA] -----------------------------------------------------------
+      // [CODE MỚI] Ưu tiên lấy cột HinhAnhHienThi, nếu không có thì lấy HinhAnhThucTe
+      // Chú ý: Kiểm tra kỹ xem nó có phải là chuỗi (string) không để tránh lỗi crash
+      const rawImg = d.HinhAnhHienThi || d.HinhAnhThucTe;
+
+      let cleanPath = "";
+      if (rawImg && typeof rawImg === "string") {
+        cleanPath = rawImg.replace(/\\/g, "/");
+      }
+
+      const imageHtml = cleanPath
+        ? `<a href="#" onclick="openImageModal('${encodeURI(cleanPath)}')" title="Xem ảnh">
+       <img src="${encodeURI(cleanPath)}" class="table-thumbnail" alt="thumbnail" loading="lazy">
+     </a>`
+        : "";
+      // [KẾT THÚC SỬA] ----------------------------------------------------------
+
+      return `
       <tr>
         <td>${d.MaThietBi}</td>
-        <td>${d.TenThietBi}</td>
-        <td>${d.LoaiThietBi}</td>
+        <td>${name}</td>
+        <td>${d.LoaiThietBi || ""}</td>
         <td>${d.SerialSN || "-"}</td>
         <td>${formatDate(d.NgayNhap)}</td>
-        <td><span class="status-badge ${getStatusClass(
-          d.Trangthai,
-        )}">${getTranslatedStatus(d.Trangthai)}</span></td>
-                <td>${d.Nguoisudung || "-"}</td>
+        <td><span class="status-badge ${getStatusClass(d.Trangthai)}">${getTranslatedStatus(d.Trangthai)}</span></td>
+        <td>${d.Nguoisudung || "-"}</td>
         <td>${d.Vitri || "-"}</td>
-        <td data-label="Hình ảnh">
-          ${
-            d.HinhAnhThucTe
-              ? `<a href="#" onclick="openImageModal(encodeURI('${
-                  d.HinhAnhThucTe
-                }'))" title="Xem ảnh"><img src="${encodeURI(
-                  d.HinhAnhThucTe,
-                )}" class="table-thumbnail" alt="thumbnail" loading="lazy" decoding="async"></a>`
-              : ""
-          }
-        </td>
+        <td data-label="Hình ảnh">${imageHtml}</td>
         <td>${actions}</td>
       </tr>`;
-  });
+    })
+    .join(""); // Nối tất cả thành 1 chuỗi lớn
+
+  devicesTableBody.innerHTML = htmlRows; // Gán 1 lần duy nhất vào DOM
 }
 
 function openImageModal(imageSrc) {
@@ -738,128 +771,59 @@ function sortData(data, sortInfo) {
   });
 }
 
+/* =========================================
+   2. HÀM LỌC VÀ HIỂN THỊ (ĐÃ CẬP NHẬT LOGIC TABS)
+   ========================================= */
 function applyFiltersAndRender() {
-  // Filter devices
-  const deviceSearchTerm = deviceSearchInput.value.toLowerCase().trim();
-  const deviceStatus = deviceStatusFilter.value;
+  let filtered = devices;
 
-  // Reset page to 1 if filters change
-  if (
-    applyFiltersAndRender.lastDeviceSearch !== deviceSearchTerm ||
-    applyFiltersAndRender.lastDeviceStatus !== deviceStatus
-  )
-    deviceCurrentPage = 1;
-
-  const filteredDevices = devices.filter((d) => {
-    const name = (d.TenThietBi || d.Model || "").toLowerCase(); // 👈 THÊM
-
-    const matchesSearch =
-      !deviceSearchTerm ||
-      d.MaThietBi.toLowerCase().includes(deviceSearchTerm) ||
-      name.includes(deviceSearchTerm) || // 👈 DÙNG name
-      (d.SerialSN || "").toLowerCase().includes(deviceSearchTerm) ||
-      (d.Nguoisudung || "").toLowerCase().includes(deviceSearchTerm) ||
-      (d.Vitri || "").toLowerCase().includes(deviceSearchTerm); // 👈 gộp luôn vào điều kiện
-
-    const matchesStatus = !deviceStatus || d.Trangthai === deviceStatus;
-
-    // Nếu có filter tháng thì chỉ lấy thiết bị có Ngày nhập trong tháng/năm đó
-    let matchesMonth = true;
-    if (deviceDateFilter) {
-      if (!d.NgayNhap) {
-        matchesMonth = false;
-      } else {
-        const dt = new Date(d.NgayNhap);
-        if (Number.isNaN(dt.getTime())) {
-          matchesMonth = false;
-        } else {
-          const y = dt.getFullYear();
-          const m = dt.getMonth() + 1; // 1..12
-          matchesMonth =
-            y === deviceDateFilter.year && m === deviceDateFilter.month;
-        }
-      }
+  // --- Lọc theo ô tìm kiếm ---
+  const deviceSearchInput = document.getElementById("deviceSearchInput");
+  if (deviceSearchInput) {
+    const term = deviceSearchInput.value.toLowerCase().trim();
+    if (term) {
+      filtered = filtered.filter((d) => {
+        return (
+          (d.MaThietBi || "").toLowerCase().includes(term) ||
+          (d.TenThietBi || "").toLowerCase().includes(term) ||
+          (d.SerialSN || "").toLowerCase().includes(term)
+        );
+      });
     }
-
-    return matchesSearch && matchesStatus && matchesMonth;
-  });
-
-  applyFiltersAndRender.lastDeviceSearch = deviceSearchTerm;
-  applyFiltersAndRender.lastDeviceStatus = deviceStatus;
-
-  sortData(filteredDevices, deviceSort);
-
-  // 👇 NEW: đảm bảo currentPage không vượt quá số trang hiện có
-  const totalDevicePages = Math.ceil(filteredDevices.length / ROWS_PER_PAGE);
-  if (totalDevicePages === 0) {
-    deviceCurrentPage = 1;
-  } else if (deviceCurrentPage > totalDevicePages) {
-    deviceCurrentPage = totalDevicePages;
   }
 
-  // Paginate devices
-  const deviceStartIndex = (deviceCurrentPage - 1) * ROWS_PER_PAGE;
-  const paginatedDevices = filteredDevices.slice(
-    deviceStartIndex,
-    deviceStartIndex + ROWS_PER_PAGE,
-  );
-  renderDevicesTable(paginatedDevices);
+  // --- Lọc theo Tab Trạng Thái ---
+  if (currentTabStatus) {
+    filtered = filtered.filter((d) => d.Trangthai === currentTabStatus);
+  }
+
+  // --- Sắp xếp ---
+  sortData(filtered, deviceSort);
+
+  // [QUAN TRỌNG] TÍNH TOÁN PHÂN TRANG (CẮT DỮ LIỆU)
+  const totalItems = filtered.length;
+  const totalPages = Math.ceil(totalItems / ROWS_PER_PAGE) || 1;
+
+  if (deviceCurrentPage > totalPages) deviceCurrentPage = 1;
+
+  const start = (deviceCurrentPage - 1) * ROWS_PER_PAGE;
+  const end = start + ROWS_PER_PAGE;
+  const dataOnPage = filtered.slice(start, end); // Chỉ lấy 10 dòng để hiển thị
+
+  // Render bảng với dữ liệu ĐÃ CẮT
+  renderDevicesTable(dataOnPage);
+
+  // Render thanh phân trang (Truyền đúng ID chuỗi "devicesPagination")
   renderPagination(
     "devicesPagination",
     deviceCurrentPage,
-    filteredDevices.length,
+    totalItems,
     ROWS_PER_PAGE,
     (page) => {
       deviceCurrentPage = page;
       applyFiltersAndRender();
     },
   );
-
-  // Filter users
-  const userSearchTerm = userSearchInput.value.toLowerCase().trim();
-  const userDepartment = userDepartmentFilter.value;
-  if (
-    applyFiltersAndRender.lastUserSearch !== userSearchTerm ||
-    applyFiltersAndRender.lastUserDepartment !== userDepartment
-  )
-    userCurrentPage = 1;
-
-  const filteredUsers = users.filter((u) => {
-    const matchesSearch =
-      !userSearchTerm ||
-      u.MaNV.toLowerCase().includes(userSearchTerm) ||
-      u.HoVaTen.toLowerCase().includes(userSearchTerm) ||
-      (u.Thietbisudung || "").toLowerCase().includes(userSearchTerm);
-
-    const matchesDepartment = !userDepartment || u.Phongban === userDepartment;
-
-    return matchesSearch && matchesDepartment;
-  });
-
-  applyFiltersAndRender.lastUserSearch = userSearchTerm;
-  applyFiltersAndRender.lastUserDepartment = userDepartment;
-
-  sortData(filteredUsers, userSort);
-
-  // Paginate users
-  const userStartIndex = (userCurrentPage - 1) * ROWS_PER_PAGE;
-  const paginatedUsers = filteredUsers.slice(
-    userStartIndex,
-    userStartIndex + ROWS_PER_PAGE,
-  );
-  renderUsersTable(paginatedUsers);
-  renderPagination(
-    "usersPagination",
-    userCurrentPage,
-    filteredUsers.length,
-    ROWS_PER_PAGE,
-    (page) => {
-      userCurrentPage = page;
-      applyFiltersAndRender();
-    },
-  );
-
-  updateSortUI();
 }
 
 function applyPurchasesFiltersAndRender() {
@@ -1030,22 +994,22 @@ function updateStats() {
   const currentYear = now.getFullYear();
   const currentMonth = now.getMonth();
 
-  const total = devices.filter((d) => {
-    const purchaseDate = new Date(d.NgayNhap);
-    return !isNaN(purchaseDate) && purchaseDate <= now;
-  }).length;
+  const total = devices.length;
 
+  // Lọc theo đúng chuỗi trong Database
   const active = devices.filter((d) => d.Trangthai === "Đang sử dụng").length;
   const maintenance = devices.filter((d) => d.Trangthai === "Bảo Hành").length;
-  const broken = devices.filter((d) => d.Trangthai === "Hư Hỏng").length;
+  const broken = devices.filter((d) => d.Trangthai === "Hư Hỏng").length; // Đếm hư hỏng
   const available = devices.filter((d) => d.Trangthai === "Sẵn sàng").length;
 
-  totalDevicesEl.textContent = devices.length;
-  activeDevicesEl.textContent = active;
-  maintenanceDevicesEl.textContent = maintenance;
-  availableDevicesEl.textContent = available;
-  if (brokenDevicesEl) brokenDevicesEl.textContent = broken;
+  // Gán giá trị vào thẻ HTML
+  if (totalDevicesEl) totalDevicesEl.textContent = total;
+  if (activeDevicesEl) activeDevicesEl.textContent = active;
+  if (maintenanceDevicesEl) maintenanceDevicesEl.textContent = maintenance;
+  if (availableDevicesEl) availableDevicesEl.textContent = available;
+  if (brokenDevicesEl) brokenDevicesEl.textContent = broken; // Gán số lượng hư hỏng
 
+  // Tính thiết bị mới trong tháng
   const newDevices = devices.filter((d) => {
     const purchaseDate = new Date(d.NgayNhap);
     return (
@@ -1055,20 +1019,29 @@ function updateStats() {
     );
   }).length;
 
-  newDevicesTextEl.textContent = `+${newDevices} ${t("newDevicesThisMonth")}`;
-  activePercentEl.textContent = `${percent(active, total)}% ${t(
-    "ofTotalDevices",
-  )}`;
-  maintenancePercentEl.textContent = `${percent(maintenance, total)}% ${t(
-    "ofTotalDevices",
-  )}`;
-  availablePercentEl.textContent = `${percent(available, total)}% ${t(
-    "ofTotalDevices",
-  )}`;
+  if (newDevicesTextEl)
+    newDevicesTextEl.textContent = `+${newDevices} ${t("newDevicesThisMonth")}`;
+
+  // Tính % hiển thị
+  if (activePercentEl)
+    activePercentEl.textContent = `${percent(active, total)}% ${t("ofTotalDevices")}`;
+  if (maintenancePercentEl)
+    maintenancePercentEl.textContent = `${percent(maintenance, total)}% ${t("ofTotalDevices")}`;
+  if (availablePercentEl)
+    availablePercentEl.textContent = `${percent(available, total)}% ${t("ofTotalDevices")}`;
   if (brokenPercentEl)
-    brokenPercentEl.textContent = `${percent(broken, total)}% ${t(
-      "ofTotalDevices",
-    )}`;
+    brokenPercentEl.textContent = `${percent(broken, total)}% ${t("ofTotalDevices")}`;
+
+  // Cập nhật số lượng trên các Tabs bộ lọc (nếu có id tương ứng)
+  const setTxt = (id, val) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = val;
+  };
+  setTxt("count-all", total);
+  setTxt("count-available", available);
+  setTxt("count-inuse", active);
+  setTxt("count-maintenance", maintenance);
+  setTxt("count-broken", broken);
 }
 
 function initCharts() {
@@ -1290,6 +1263,7 @@ function updateChartSection(year) {
   ).length;
   const totalBroken = inYear.filter((d) => d.Trangthai === "Hư Hỏng").length;
 
+  // Cập nhật 4 nhãn và 4 màu sắc
   const labels = [
     t("chart_total"),
     t("chart_in_use"),
@@ -1298,10 +1272,10 @@ function updateChartSection(year) {
   ];
   const data = [totalPurchased, totalActive, totalMaintenance, totalBroken];
   const colors = [
-    "rgba(52, 152, 219, 0.7)", // Tổng số
-    "rgba(46, 204, 113, 0.7)", // Đang sử dụng
-    "rgba(243, 156, 18, 0.7)", // Bảo Hành
-    "rgba(231, 76, 60, 0.7)", // Hư Hỏng
+    "rgba(52, 152, 219, 0.7)", // Tổng số (Blue)
+    "rgba(46, 204, 113, 0.7)", // Đang sử dụng (Green)
+    "rgba(243, 156, 18, 0.7)", // Bảo Hành (Orange)
+    "rgba(231, 76, 60, 0.7)", // Hư Hỏng (Red)
   ];
 
   if (yearlyChart) yearlyChart.destroy();
@@ -1323,14 +1297,14 @@ function updateChartSection(year) {
       maintainAspectRatio: false,
       plugins: {
         legend: {
-          display: false, // Tắt chú thích mặc định cho biểu đồ cột
+          display: false,
         },
       },
       scales: {
         y: {
           beginAtZero: true,
           ticks: {
-            stepSize: 1, // Đảm bảo các bước nhảy là số nguyên
+            stepSize: 1,
             callback: (value) => (Number.isInteger(value) ? value : undefined),
           },
         },
@@ -1338,30 +1312,22 @@ function updateChartSection(year) {
     },
   });
 
-  // Vẽ chú thích 4 ô vuông dưới biểu đồ
   renderYearlyLegend(colors, labels);
 
-  // Cập nhật thẻ số liệu
+  // Cập nhật số liệu text bên dưới biểu đồ
   if (yearlyPurchasedEl) yearlyPurchasedEl.textContent = totalPurchased;
   if (yearlyActiveEl) yearlyActiveEl.textContent = totalActive;
   if (yearlyMaintenanceEl) yearlyMaintenanceEl.textContent = totalMaintenance;
-  if (yearlyBrokenEl) yearlyBrokenEl.textContent = totalBroken;
+  if (yearlyBrokenEl) yearlyBrokenEl.textContent = totalBroken; // Đã thêm ID này vào HTML chưa?
+
   if (selectedYearTextEl) selectedYearTextEl.textContent = String(year);
+
   if (yearlyActivePercentEl)
-    yearlyActivePercentEl.textContent = `${percent(
-      totalActive,
-      totalPurchased,
-    )}% ${t("ofTotalDevicesInYear")}`;
+    yearlyActivePercentEl.textContent = `${percent(totalActive, totalPurchased)}% ${t("ofTotalDevicesInYear")}`;
   if (yearlyMaintenancePercentEl)
-    yearlyMaintenancePercentEl.textContent = `${percent(
-      totalMaintenance,
-      totalPurchased,
-    )}% ${t("ofTotalDevicesInYear")}`;
+    yearlyMaintenancePercentEl.textContent = `${percent(totalMaintenance, totalPurchased)}% ${t("ofTotalDevicesInYear")}`;
   if (yearlyBrokenPercentEl)
-    yearlyBrokenPercentEl.textContent = `${percent(
-      totalBroken,
-      totalPurchased,
-    )}% ${t("ofTotalDevicesInYear")}`;
+    yearlyBrokenPercentEl.textContent = `${percent(totalBroken, totalPurchased)}% ${t("ofTotalDevicesInYear")}`;
 }
 
 function renderYearlyLegend(colors, labels) {
@@ -1442,6 +1408,19 @@ function editDevice(id) {
   deviceModal.style.display = "flex";
 }
 async function saveDevice() {
+  // [ĐOẠN CODE MỚI THÊM] ==============================================
+  // Tự động xóa người dùng nếu trạng thái là Sẵn sàng/Bảo hành/Hư hỏng
+  const statusEl = document.getElementById("Trangthai");
+  const userEl = document.getElementById("Nguoisudung");
+
+  if (statusEl && userEl) {
+    const chosenStatus = statusEl.value;
+    // Nếu trạng thái KHÔNG PHẢI là "Đang sử dụng", thì reset người dùng về rỗng
+    if (["Sẵn sàng", "Bảo Hành", "Hư Hỏng"].includes(chosenStatus)) {
+      userEl.value = "";
+    }
+  }
+  // [KẾT THÚC ĐOẠN MỚI] ===============================================
   const payload = {
     MaThietBi: document.getElementById("MaThietBi").value.trim(),
     TenThietBi: document.getElementById("TenThietBi").value.trim(),
@@ -1452,6 +1431,27 @@ async function saveDevice() {
     Nguoisudung: document.getElementById("Nguoisudung").value || null,
     Vitri: document.getElementById("Vitri").value.trim(),
   };
+
+  // [CHÈN VÀO SAU ĐOẠN KHAI BÁO PAYLOAD] ------------------------------------
+
+  // 1. [SỬA] Nếu chọn "Đang sử dụng" mà không chọn người -> Cho phép đi tiếp để Backend tự khôi phục
+  // Chỉ báo lỗi nếu là THÊM MỚI (vì thêm mới không có lịch sử để khôi phục)
+  if (
+    !currentDeviceId &&
+    payload.Trangthai === "Đang sử dụng" &&
+    !payload.Nguoisudung
+  ) {
+    return showAlert(
+      "❌ Khi thêm mới với trạng thái 'Đang sử dụng', bạn bắt buộc phải chọn 'Người sử dụng'!",
+      false,
+    );
+  }
+
+  // 2. Nếu chọn các trạng thái khác -> Đảm bảo xóa người dùng để không lưu rác
+  if (["Sẵn sàng", "Bảo Hành", "Hư Hỏng"].includes(payload.Trangthai)) {
+    payload.Nguoisudung = null;
+  }
+  // [KẾT THÚC ĐOẠN CHÈN] ----------------------------------------------------
 
   if (!payload.MaThietBi || !payload.TenThietBi)
     return showAlert(t("alert_enter_device_code_name"), false);
@@ -2006,7 +2006,7 @@ function debounce(func, wait) {
 
 // Tạo các hàm tìm kiếm có độ trễ 400ms
 const debouncedDeviceSearch = debounce(() => applyFiltersAndRender(), 400);
-const debouncedUserSearch = debounce(() => applyFiltersAndRender(), 400);
+const debouncedUserSearch = debounce(() => applyUserFiltersAndRender(), 400);
 const debouncedPurchaseSearch = debounce(
   () => applyPurchasesFiltersAndRender(),
   400,
@@ -2019,7 +2019,7 @@ purchaseSearchInput?.addEventListener("input", debouncedPurchaseSearch);
 
 // Các bộ lọc select/dropdown thì giữ nguyên (không cần debounce vì click là chọn ngay)
 deviceStatusFilter?.addEventListener("change", applyFiltersAndRender);
-userDepartmentFilter?.addEventListener("change", applyFiltersAndRender);
+userDepartmentFilter?.addEventListener("change", applyUserFiltersAndRender);
 purchaseSourceFilter?.addEventListener(
   "change",
   applyPurchasesFiltersAndRender,
@@ -3051,17 +3051,18 @@ async function loadAccounts() {
       // Dùng input type="password" để mặc định ẩn (hiện chấm tròn)
       // Thêm style trực tiếp (inline-css) để bạn không cần sửa file .css
       passwordHtml = `
-        <div style="display: flex; align-items: center; justify-content: center; gap: 8px;">
+        <div class="password-wrapper">
             <input type="password" 
                    value="${acc.MatKhauGoc}" 
                    id="${inputId}" 
                    readonly 
-                   style="border: none; background: transparent; width: 100px; text-align: center; color: #d63031; font-weight: bold; outline: none; font-family: monospace;"
+                   class="password-input-readonly"
             />
             <i class="fas fa-eye" 
-               onclick="toggleTablePassword('${inputId}', this)" 
+               onclick="toggleTablePassword('${inputId}', this)"
+               class="toggle-icon" 
                title="Xem mật khẩu"
-               style="cursor: pointer; color: #555;">
+               >
             </i>
         </div>
       `;
@@ -3133,3 +3134,160 @@ window.deleteAccount = deleteAccount;
 window.loadAccounts = loadAccounts;
 window.toggleTablePassword = toggleTablePassword; // Đừng quên dòng này
 // ----------------------------------------------
+
+/* =======================================================
+   CÁC HÀM XỬ LÝ GIAO DIỆN TABS (THÊM VÀO CUỐI FILE)
+   ======================================================= */
+
+// 1. Hàm đếm số lượng thiết bị cho từng trạng thái
+function updateDeviceStatusCounts() {
+  if (!devices) return;
+
+  // Đếm số lượng
+  const allCount = devices.length;
+  const availableCount = devices.filter(
+    (d) => d.Trangthai === "Sẵn sàng",
+  ).length;
+  const inUseCount = devices.filter(
+    (d) => d.Trangthai === "Đang sử dụng",
+  ).length;
+  const maintenanceCount = devices.filter(
+    (d) => d.Trangthai === "Bảo Hành",
+  ).length;
+  const brokenCount = devices.filter((d) => d.Trangthai === "Hư Hỏng").length;
+
+  // Cập nhật lên giao diện HTML
+  const setTxt = (id, val) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = val;
+  };
+
+  setTxt("count-all", allCount);
+  setTxt("count-available", availableCount);
+  setTxt("count-inuse", inUseCount);
+  setTxt("count-maintenance", maintenanceCount);
+  setTxt("count-broken", brokenCount);
+}
+
+// 2. Hàm xử lý sự kiện khi bấm vào Tab
+function filterDeviceByTab(status) {
+  // Cập nhật biến trạng thái toàn cục
+  currentTabStatus = status;
+
+  // --- Hiệu ứng chuyển đổi Tab Active ---
+  const tabs = document.querySelectorAll("#deviceStatusTabs .status-tab");
+  tabs.forEach((tab) => tab.classList.remove("active"));
+
+  // Tìm tab vừa bấm để thêm class active
+  // (Sử dụng event.currentTarget để lấy chính xác nút button được click)
+  if (window.event && window.event.currentTarget) {
+    window.event.currentTarget.classList.add("active");
+  }
+
+  // Reset về trang 1 và render lại bảng
+  deviceCurrentPage = 1;
+  applyFiltersAndRender();
+}
+
+// Đưa hàm ra phạm vi Window để HTML gọi được (quan trọng)
+window.filterDeviceByTab = filterDeviceByTab;
+
+/* =========================================
+   LOGIC MỚI CHO TAB USER VÀ RENDER USER
+   ========================================= */
+
+// 1. Cập nhật số liệu trên Tabs User
+function updateUserStats() {
+  if (!users) return;
+  const total = users.length;
+  const inUse = users.filter((u) => u.Trangthai === "Đang sử dụng").length;
+  const empty = users.filter(
+    (u) => !u.Trangthai || u.Trangthai === "Chưa cấp",
+  ).length;
+
+  const setTxt = (id, val) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = val;
+  };
+  setTxt("count-user-all", total);
+  setTxt("count-user-inuse", inUse);
+  setTxt("count-user-empty", empty);
+}
+
+// 2. Xử lý click Tab User
+function filterUserByTab(status) {
+  currentUserTabStatus = status;
+
+  // Update UI active class
+  const tabs = document.querySelectorAll("#userStatusTabs .status-tab");
+  tabs.forEach((tab) => tab.classList.remove("active"));
+  if (window.event && window.event.currentTarget) {
+    window.event.currentTarget.classList.add("active");
+  }
+
+  userCurrentPage = 1;
+  applyUserFiltersAndRender();
+}
+// Đưa ra window để HTML gọi
+window.filterUserByTab = filterUserByTab;
+
+// 3. Hàm Lọc và Render User (Tương tự Device)
+function applyUserFiltersAndRender() {
+  let filtered = users;
+
+  // Lọc theo Search
+  const term = document
+    .getElementById("userSearchInput")
+    ?.value.toLowerCase()
+    .trim();
+  if (term) {
+    filtered = filtered.filter(
+      (u) =>
+        (u.MaNV || "").toLowerCase().includes(term) ||
+        (u.HoVaTen || "").toLowerCase().includes(term),
+    );
+  }
+
+  // Lọc theo Phòng ban
+  const dept = document.getElementById("userDepartmentFilter")?.value;
+  if (dept) {
+    filtered = filtered.filter((u) => u.Phongban === dept);
+  }
+
+  // Lọc theo Tab Trạng thái
+  if (currentUserTabStatus) {
+    if (currentUserTabStatus === "Chưa cấp") {
+      filtered = filtered.filter(
+        (u) => !u.Trangthai || u.Trangthai === "Chưa cấp",
+      );
+    } else {
+      filtered = filtered.filter((u) => u.Trangthai === currentUserTabStatus);
+    }
+  }
+
+  // Sắp xếp
+  sortData(filtered, userSort);
+
+  // Phân trang
+  const totalItems = filtered.length;
+  const totalPages = Math.ceil(totalItems / ROWS_PER_PAGE) || 1;
+  if (userCurrentPage > totalPages) userCurrentPage = 1;
+
+  const start = (userCurrentPage - 1) * ROWS_PER_PAGE;
+  const end = start + ROWS_PER_PAGE;
+  const dataOnPage = filtered.slice(start, end);
+
+  renderUsersTable(dataOnPage);
+
+  // Render Pagination (chú ý ID container)
+  renderPagination(
+    "usersPagination",
+    userCurrentPage,
+    totalItems,
+    ROWS_PER_PAGE,
+    (page) => {
+      userCurrentPage = page;
+      applyUserFiltersAndRender();
+    },
+  );
+}
