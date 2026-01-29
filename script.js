@@ -1479,11 +1479,6 @@ async function saveDevice() {
   payload.Trangthai =
     chosenStatus || (payload.Nguoisudung ? "Đang sử dụng" : "Sẵn sàng");
 
-  const prevDev = currentDeviceId
-    ? devices.find((x) => x.MaThietBi === currentDeviceId)
-    : null;
-  const prevUserName = prevDev?.Nguoisudung || null;
-
   const url = currentDeviceId
     ? `/api/devices/${currentDeviceId}`
     : "/api/devices";
@@ -1495,50 +1490,6 @@ async function saveDevice() {
     body: JSON.stringify(payload),
   });
   if (ok === null) return;
-
-  if (window.currentRole === "admin") {
-    try {
-      if (!payload.Nguoisudung && prevUserName) {
-        const userPrev = users.find(
-          (u) =>
-            u.HoVaTen === prevUserName &&
-            u.Thietbisudung === (prevDev?.MaThietBi || payload.MaThietBi),
-        );
-        if (userPrev) {
-          await updateUserFull(userPrev, {
-            Thietbisudung: null,
-            Ngaycap: null,
-            Trangthai: "Chưa cấp",
-          });
-        }
-      }
-      if (payload.Nguoisudung && payload.Nguoisudung !== prevUserName) {
-        if (prevUserName) {
-          const userOld = users.find(
-            (u) =>
-              u.HoVaTen === prevUserName &&
-              u.Thietbisudung === (prevDev?.MaThietBi || payload.MaThietBi),
-          );
-          if (userOld) {
-            await updateUserFull(userOld, {
-              Thietbisudung: null,
-              Ngaycap: null,
-              Trangthai: "Chưa cấp",
-            });
-          }
-        }
-        const userNew = users.find((u) => u.MaNV === payload.Nguoisudung);
-        if (userNew) {
-          await updateUserFull(userNew, {
-            Thietbisudung: payload.MaThietBi,
-            Trangthai: "Đang sử dụng",
-          });
-        }
-      }
-    } catch (e) {
-      console.error("Lỗi đồng bộ người dùng cho thiết bị:", e);
-    }
-  }
 
   deviceModal.style.display = "none";
   await loadAllData();
@@ -1568,15 +1519,16 @@ function editUser(id) {
   userModal.style.display = "flex";
 }
 async function saveUser() {
+  const ngayCapValue = document.getElementById("assignDate").value;
+  const deviceValue = document.getElementById("userDevice").value;
+
   const payload = {
     MaNV: document.getElementById("userCode").value.trim(),
     HoVaTen: document.getElementById("userName").value.trim(),
     Phongban: document.getElementById("userDepartment").value,
-    Thietbisudung: document.getElementById("userDevice").value || null,
-    Ngaycap: document.getElementById("assignDate").value || null,
-    Trangthai: document.getElementById("userDevice").value
-      ? "Đang sử dụng"
-      : "Chưa cấp",
+    Thietbisudung: deviceValue || null,
+    Ngaycap: ngayCapValue || null,
+    Trangthai: deviceValue ? "Đang sử dụng" : "Chưa cấp",
   };
 
   if (!payload.MaNV || !payload.HoVaTen)
@@ -1815,6 +1767,7 @@ async function updateDeviceFull(dev, overrides = {}) {
     NgayNhap: dev.NgayNhap ? formatDate(dev.NgayNhap) : null,
     Trangthai: dev.Trangthai || "Sẵn sàng",
     Nguoisudung: dev.Nguoisudung || null,
+    Vitri: dev.Vitri || null, // [FIX] Thêm dòng này để giữ lại Vị trí cũ
     ...overrides,
   };
   return fetchJson(`/api/devices/${dev.MaThietBi}`, {

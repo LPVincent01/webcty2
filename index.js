@@ -1001,7 +1001,7 @@ app.post("/api/devices", authenticate, async (req, res) => {
           .input("MaThietBi", sql.VarChar, MaThietBi)
           .input("Ngaycap", sql.Date, Ngaycap || null)
           .query(
-            "UPDATE dbo.NHANVIEN SET Thietbisudung=@MaThietBi, Ngaycap=COALESCE(@Ngaycap, Ngaycap), Trangthai=N'Đang sử dụng' WHERE MaNV=@MaNV",
+            "UPDATE dbo.NHANVIEN SET Thietbisudung=@MaThietBi, Ngaycap = CASE WHEN Ngaycap IS NOT NULL THEN Ngaycap ELSE COALESCE(@Ngaycap, GETDATE()) END, Trangthai=N'Đang sử dụng' WHERE MaNV=@MaNV",
           );
       }
     });
@@ -1088,18 +1088,30 @@ app.put("/api/devices/:id", authenticate, upload, async (req, res) => {
       }
     }
 
-    // 3. RESTORE: Nếu chuyển về "Đang sử dụng" mà KHÔNG chọn người (Nguoisudung rỗng)
-    // Thì tự động lấy lại người cũ và ngày cấp cũ
-    if (Trangthai === "Đang sử dụng" && !Nguoisudung) {
-      if (oldDev.LastUserName) {
-        Nguoisudung = oldDev.LastUserName; // Khôi phục tên người
-        restoreDate = oldDev.LastAssignedDate; // Khôi phục ngày cấp
+    // 3. RESTORE: Logic khôi phục ngày cấp cũ (Quan trọng cho quy trình Bảo hành -> Đang sử dụng)
+    if (Trangthai === "Đang sử dụng") {
+      // Trường hợp A: Người dùng để trống -> Tự động lấy lại người cũ từ lịch sử
+      if (!Nguoisudung) {
+        if (oldDev.LastUserName) {
+          Nguoisudung = oldDev.LastUserName;
+          restoreDate = oldDev.LastAssignedDate;
+          console.log(`♻️ Auto-restore: ${Nguoisudung} - Date: ${restoreDate}`);
+        } else {
+          throw new Error(
+            "Không tìm thấy lịch sử người dùng cũ. Vui lòng chọn người sử dụng.",
+          );
+        }
+      }
+      // Trường hợp B: Có chọn người (từ Frontend gửi lên) -> Kiểm tra xem có phải người cũ không
+      // Nếu đúng là người cũ (so sánh Tên hoặc Mã) -> Lấy lại ngày cấp cũ
+      else if (
+        oldDev.LastUserName &&
+        (Nguoisudung === oldDev.LastUserName ||
+          Nguoisudung === oldDev.LastUserId)
+      ) {
+        restoreDate = oldDev.LastAssignedDate;
         console.log(
-          `♻️ Khôi phục thiết bị ${id} cho ${Nguoisudung} vào ngày ${restoreDate}`,
-        );
-      } else {
-        throw new Error(
-          "Không tìm thấy lịch sử người dùng cũ để khôi phục. Vui lòng chọn người sử dụng thủ công.",
+          `♻️ Matched old user: ${Nguoisudung} - Restoring date: ${restoreDate}`,
         );
       }
     }
@@ -1133,10 +1145,15 @@ app.put("/api/devices/:id", authenticate, upload, async (req, res) => {
     // LOGIC ĐỒNG BỘ SANG BẢNG NHÂN VIÊN (Quan trọng)
 
     // Bước 1: Luôn gỡ thiết bị này khỏi người cũ (để tránh 1 thiết bị 2 chủ)
-    await transaction.request().input("MaThietBi", sql.VarChar, id).query(`
+    // [FIX] Trừ người dùng MỚI ra (nếu đang gán cho họ), để không bị xoá mất ngày cấp cũ của họ
+    await transaction
+      .request()
+      .input("MaThietBi", sql.VarChar, id)
+      .input("NewUser", sql.NVarChar, Nguoisudung || "").query(`
         UPDATE NHANVIEN 
         SET Thietbisudung = NULL, Ngaycap = NULL, Trangthai = N'Chưa cấp'
         WHERE Thietbisudung = @MaThietBi
+          AND (@NewUser = '' OR (HoVaTen <> @NewUser AND MaNV <> @NewUser))
       `);
 
     // Bước 2: Nếu trạng thái mới là "Đang sử dụng" -> Gán cho người mới & CẬP NHẬT NGÀY CẤP MỚI
@@ -1149,7 +1166,7 @@ app.put("/api/devices/:id", authenticate, upload, async (req, res) => {
         .query(`
           UPDATE NHANVIEN 
           SET Thietbisudung = @MaThietBi, 
-              Ngaycap = COALESCE(@RestoreDate, GETDATE()), -- Ưu tiên ngày cũ, nếu không có thì lấy ngày hiện tại
+              Ngaycap = CASE WHEN Ngaycap IS NOT NULL THEN Ngaycap ELSE COALESCE(@RestoreDate, GETDATE()) END, -- Chỉ điền ngày nếu DB đang trống
               Trangthai = N'Đang sử dụng'
           WHERE HoVaTen = @TenNV OR MaNV = @TenNV -- Tìm đúng nhân viên để gán
         `);
@@ -1279,7 +1296,7 @@ app.post("/api/assign", authenticate, async (req, res) => {
         .input("MaThietBi", sql.VarChar, MaThietBi)
         .input("Ngaycap", sql.Date, Ngaycap || null)
         .query(
-          "UPDATE dbo.NHANVIEN SET Thietbisudung=@MaThietBi, Ngaycap=@Ngaycap, Trangthai=N'Đang sử dụng' WHERE MaNV=@MaNV",
+          "UPDATE dbo.NHANVIEN SET Thietbisudung=@MaThietBi, Ngaycap = CASE WHEN Ngaycap IS NOT NULL THEN Ngaycap ELSE COALESCE(@Ngaycap, GETDATE()) END, Trangthai=N'Đang sử dụng' WHERE MaNV=@MaNV",
         );
 
       await new sql.Request(tx)
@@ -1391,6 +1408,7 @@ app.put("/api/users/:id", authenticate, authorizeAdmin, async (req, res) => {
 
   try {
     await runTx(async (tx) => {
+      // 1. Kiểm tra nhân viên tồn tại
       const uRes = await new sql.Request(tx)
         .input("MaNV", sql.VarChar, id)
         .query("SELECT TOP 1 * FROM dbo.NHANVIEN WHERE MaNV=@MaNV");
@@ -1401,6 +1419,7 @@ app.put("/api/users/:id", authenticate, authorizeAdmin, async (req, res) => {
       }
       const curr = uRes.recordset[0];
 
+      // 2. Xử lý đổi mã nhân viên (nếu có)
       let targetId = id;
       if (NewMaNV && NewMaNV !== id) {
         const existsNew = await new sql.Request(tx)
@@ -1418,6 +1437,7 @@ app.put("/api/users/:id", authenticate, authorizeAdmin, async (req, res) => {
         targetId = NewMaNV;
       }
 
+      // 3. Cập nhật thông tin cơ bản
       await new sql.Request(tx)
         .input("MaNV", sql.VarChar, targetId)
         .input("HoVaTen", sql.NVarChar, HoVaTen ?? curr.HoVaTen ?? "")
@@ -1428,11 +1448,13 @@ app.put("/api/users/:id", authenticate, authorizeAdmin, async (req, res) => {
 
       const newName = HoVaTen ?? curr.HoVaTen;
 
+      // 4. Xử lý thiết bị và ngày cấp
       if (typeof Thietbisudung !== "undefined") {
         const newDevId = Thietbisudung || null;
         const prevDevId = curr.Thietbisudung || null;
 
         if (!newDevId) {
+          // --- TRƯỜNG HỢP: GỠ THIẾT BỊ ---
           if (prevDevId) {
             await new sql.Request(tx)
               .input("PrevDev", sql.VarChar, prevDevId)
@@ -1440,13 +1462,18 @@ app.put("/api/users/:id", authenticate, authorizeAdmin, async (req, res) => {
                 "UPDATE dbo.THIETBI SET Trangthai=N'Sẵn sàng', Nguoisudung=NULL WHERE MaThietBi=@PrevDev",
               );
           }
-          await new sql.Request(tx)
-            .input("MaNV", sql.VarChar, targetId)
-            .input("Ngaycap", sql.Date, Ngaycap || null)
-            .query(
-              "UPDATE dbo.NHANVIEN SET Thietbisudung=NULL, Ngaycap=ISNULL(@Ngaycap, Ngaycap), Trangthai=N'Chưa cấp' WHERE MaNV=@MaNV",
-            );
+          // Cập nhật nhân viên với thiết bị mới
+          await new sql.Request(tx).input("MaNV", sql.VarChar, targetId).query(
+            `UPDATE dbo.NHANVIEN 
+               SET Thietbisudung = NULL, 
+                   Ngaycap = NULL, 
+                   Trangthai = N'Chưa cấp' 
+               WHERE MaNV = @MaNV`,
+          );
         } else {
+          // --- TRƯỜNG HỢP: GÁN THIẾT BỊ MỚI (Trọng tâm câu hỏi của bạn) ---
+
+          // Kiểm tra thiết bị mới
           const dRes = await new sql.Request(tx)
             .input("MaThietBi", sql.VarChar, newDevId)
             .query(
@@ -1466,6 +1493,7 @@ app.put("/api/users/:id", authenticate, authorizeAdmin, async (req, res) => {
             );
           }
 
+          // Giải phóng thiết bị cũ (nếu có và khác thiết bị mới)
           if (prevDevId && prevDevId !== newDevId) {
             await new sql.Request(tx)
               .input("PrevDev", sql.VarChar, prevDevId)
@@ -1474,14 +1502,21 @@ app.put("/api/users/:id", authenticate, authorizeAdmin, async (req, res) => {
               );
           }
 
+          // Cập nhật nhân viên với thiết bị mới
           await new sql.Request(tx)
             .input("MaNV", sql.VarChar, targetId)
             .input("MaThietBi", sql.VarChar, newDevId)
             .input("Ngaycap", sql.Date, Ngaycap || null)
             .query(
-              "UPDATE dbo.NHANVIEN SET Thietbisudung=@MaThietBi, Ngaycap=@Ngaycap, Trangthai=N'Đang sử dụng' WHERE MaNV=@MaNV",
+              `UPDATE dbo.NHANVIEN 
+               SET Thietbisudung=@MaThietBi, 
+                   -- [FIX] Nếu đã có ngày cấp (từ Excel) thì giữ nguyên, chưa có mới lấy ngày mới
+                   Ngaycap = CASE WHEN Ngaycap IS NOT NULL THEN Ngaycap ELSE COALESCE(@Ngaycap, GETDATE()) END, 
+                   Trangthai=N'Đang sử dụng' 
+               WHERE MaNV=@MaNV`,
             );
 
+          // Cập nhật trạng thái thiết bị
           await new sql.Request(tx)
             .input("MaThietBi", sql.VarChar, newDevId)
             .input("Nguoisudung", sql.NVarChar, newName)
@@ -1491,12 +1526,14 @@ app.put("/api/users/:id", authenticate, authorizeAdmin, async (req, res) => {
             );
         }
       } else {
+        // Chỉ cập nhật thông tin khác, không đổi thiết bị
         if (typeof Ngaycap !== "undefined") {
           await new sql.Request(tx)
             .input("MaNV", sql.VarChar, targetId)
             .input("Ngaycap", sql.Date, Ngaycap || null)
             .query("UPDATE dbo.NHANVIEN SET Ngaycap=@Ngaycap WHERE MaNV=@MaNV");
         }
+        // Cập nhật tên người dùng trên thiết bị nếu đổi tên nhân viên
         if (curr.Thietbisudung && newName && newName !== curr.HoVaTen) {
           await new sql.Request(tx)
             .input("MaThietBi", sql.VarChar, curr.Thietbisudung)
