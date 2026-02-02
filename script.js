@@ -774,7 +774,7 @@ function sortData(data, sortInfo) {
 /* =========================================
    2. HÀM LỌC VÀ HIỂN THỊ (ĐÃ CẬP NHẬT LOGIC TABS)
    ========================================= */
-function applyFiltersAndRender() {
+function getFilteredDevices() {
   let filtered = devices;
 
   // --- Lọc theo ô tìm kiếm ---
@@ -805,16 +805,29 @@ function applyFiltersAndRender() {
     });
   }
 
-  // --- Cập nhật UI: Hiển thị nút xóa bộ lọc tháng nếu đang lọc ---
-  updateDateFilterIndicator();
-
   // --- Lọc theo Tab Trạng Thái ---
   if (currentTabStatus) {
     filtered = filtered.filter((d) => d.Trangthai === currentTabStatus);
   }
 
   // --- Sắp xếp ---
+  // Clone mảng nếu chưa được filter để tránh sort ảnh hưởng mảng gốc khi export
+  if (filtered === devices) {
+    filtered = [...devices];
+  }
   sortData(filtered, deviceSort);
+
+  return filtered;
+}
+
+function applyFiltersAndRender() {
+  const filtered = getFilteredDevices();
+
+  // --- Cập nhật UI: Hiển thị nút xóa bộ lọc tháng nếu đang lọc ---
+  updateDateFilterIndicator();
+
+  // --- Cập nhật số lượng hiển thị (MỚI) ---
+  updateDeviceCountLabel(filtered.length, devices.length);
 
   // [QUAN TRỌNG] TÍNH TOÁN PHÂN TRANG (CẮT DỮ LIỆU)
   const totalItems = filtered.length;
@@ -877,6 +890,9 @@ function applyPurchasesFiltersAndRender() {
 
   applyPurchasesFiltersAndRender.lastTerm = term;
   applyPurchasesFiltersAndRender.lastSource = sourceFilter;
+
+  // [CHÈN DÒNG NÀY VÀO ĐÂY]
+  updatePurchaseCountLabel(filtered.length, purchases.length);
 
   // 👇 sort theo tiêu chí hiện tại (giống devices/users)
   sortData(filtered, purchasesSort);
@@ -970,10 +986,45 @@ function updateDateFilterIndicator() {
     // Cập nhật nội dung và hiển thị
     btn.innerHTML = `<i class="fas fa-times" style="margin-right:5px"></i> Bỏ lọc: ${deviceDateFilter.month}/${deviceDateFilter.year}`;
     btn.style.display = "inline-flex";
+
+    // Cập nhật tiêu đề bảng hiển thị tháng đang lọc
+    const titleEl = document.querySelector("#devicesSection .table-title");
+    if (titleEl) {
+      titleEl.textContent = `${t("deviceListTitle")} - ${t("month_" + deviceDateFilter.month)}/${deviceDateFilter.year}`;
+    }
   } else {
     // Không có filter -> ẩn nút đi
     if (btn) btn.style.display = "none";
+
+    // Reset tiêu đề bảng về mặc định
+    const titleEl = document.querySelector("#devicesSection .table-title");
+    if (titleEl) {
+      titleEl.textContent = t("deviceListTitle");
+    }
   }
+}
+
+// --- Hàm hiển thị số lượng thiết bị (CODE MỚI - Đã khớp với HTML) ---
+function updateDeviceCountLabel(count, total) {
+  // Tìm thẻ span có id="deviceCountLabel" mà chúng ta đã thêm bên file HTML
+  const label = document.getElementById("deviceCountLabel");
+
+  if (label) {
+    // Cập nhật nội dung hiển thị (VD: 10/50)
+    label.textContent = `(${count}/${total})`;
+  }
+}
+
+// --- [CHÈN THÊM 2 HÀM MỚI NÀY XUỐNG DƯỚI] ---
+
+function updateUserCountLabel(count, total) {
+  const label = document.getElementById("userCountLabel");
+  if (label) label.textContent = `(${count}/${total})`;
+}
+
+function updatePurchaseCountLabel(count, total) {
+  const label = document.getElementById("purchaseCountLabel");
+  if (label) label.textContent = `(${count}/${total})`;
 }
 
 function renderPagination(
@@ -2587,7 +2638,8 @@ function exportDevicesToExcel() {
     "QRcode", // 👈 dùng cho Bartender
   ];
 
-  const dataToExport = devices.map((d) => ({
+  // Sử dụng danh sách đã lọc thay vì toàn bộ devices
+  const dataToExport = getFilteredDevices().map((d) => ({
     MaThietBi: d.MaThietBi,
     TenThietBi: d.TenThietBi,
     LoaiThietBi: d.LoaiThietBi,
@@ -3281,6 +3333,9 @@ function applyUserFiltersAndRender() {
       filtered = filtered.filter((u) => u.Trangthai === currentUserTabStatus);
     }
   }
+
+  // [CHÈN DÒNG NÀY VÀO TRƯỚC sortData HOẶC TRƯỚC renderUsersTable]
+  updateUserCountLabel(filtered.length, users.length);
 
   // Sắp xếp
   sortData(filtered, userSort);

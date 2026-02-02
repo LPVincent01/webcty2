@@ -1243,3 +1243,19 @@ table tbody tr:hover {
   font-size: 0.75rem;
   text-transform: capitalize;
 }
+
+/* =======================================================
+   4. Tiêu đề bảng & Số lượng (FIX HIỂN THỊ)
+   ======================================================= */
+.table-title {
+  display: inline-block; /* Để nằm cùng dòng với label */
+  margin-right: 8px;
+}
+
+.device-count-label {
+  display: inline-block;
+  font-size: 0.95rem;
+  color: #64748b; /* Màu xám xanh hiện đại */
+  font-weight: 500;
+  vertical-align: middle;
+}
