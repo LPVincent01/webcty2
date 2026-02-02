@@ -805,6 +805,9 @@ function applyFiltersAndRender() {
     });
   }
 
+  // --- Cập nhật UI: Hiển thị nút xóa bộ lọc tháng nếu đang lọc ---
+  updateDateFilterIndicator();
+
   // --- Lọc theo Tab Trạng Thái ---
   if (currentTabStatus) {
     filtered = filtered.filter((d) => d.Trangthai === currentTabStatus);
@@ -933,6 +936,44 @@ function updateSortUI() {
     `#purchasesTable th[data-sort-key="${purchasesSort.key}"]`,
   );
   if (purchasesTh) purchasesTh.classList.add(`sorted-${purchasesSort.order}`);
+}
+
+// --- Hàm hiển thị nút xóa bộ lọc tháng (MỚI) ---
+function updateDateFilterIndicator() {
+  const filterSelect = document.getElementById("deviceStatusFilter");
+  if (!filterSelect) return;
+
+  // Tìm nút cũ xem đã tạo chưa
+  let btn = document.getElementById("btnClearDateFilter");
+
+  // Nếu đang có filter ngày (deviceDateFilter khác null)
+  if (deviceDateFilter) {
+    if (!btn) {
+      // Tạo nút mới nếu chưa có
+      btn = document.createElement("button");
+      btn.id = "btnClearDateFilter";
+      btn.className = "btn btn-danger btn-sm"; // Dùng class có sẵn trong style.css
+      btn.style.marginLeft = "10px";
+      btn.style.display = "inline-flex";
+      btn.style.alignItems = "center";
+      btn.style.whiteSpace = "nowrap";
+
+      // Sự kiện click: Xóa filter và render lại
+      btn.onclick = () => {
+        deviceDateFilter = null;
+        applyFiltersAndRender();
+      };
+
+      // Chèn nút vào sau ô chọn trạng thái
+      filterSelect.parentNode.insertBefore(btn, filterSelect.nextSibling);
+    }
+    // Cập nhật nội dung và hiển thị
+    btn.innerHTML = `<i class="fas fa-times" style="margin-right:5px"></i> Bỏ lọc: ${deviceDateFilter.month}/${deviceDateFilter.year}`;
+    btn.style.display = "inline-flex";
+  } else {
+    // Không có filter -> ẩn nút đi
+    if (btn) btn.style.display = "none";
+  }
 }
 
 function renderPagination(
