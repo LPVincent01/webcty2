@@ -1,4 +1,4 @@
-﻿/***********************
+﻿﻿/***********************
  * CẤU HÌNH API
  ***********************/
 const API_BASE = window.location.origin;
@@ -790,6 +790,19 @@ function applyFiltersAndRender() {
         );
       });
     }
+  }
+
+  // --- Lọc theo Tháng/Năm (từ biểu đồ) ---
+  if (deviceDateFilter) {
+    filtered = filtered.filter((d) => {
+      if (!d.NgayNhap) return false;
+      const dt = new Date(d.NgayNhap);
+      if (isNaN(dt.getTime())) return false;
+      return (
+        dt.getFullYear() === deviceDateFilter.year &&
+        dt.getMonth() + 1 === deviceDateFilter.month
+      );
+    });
   }
 
   // --- Lọc theo Tab Trạng Thái ---
@@ -1845,6 +1858,16 @@ function navigateToDevicesByMonth(year, month) {
   // Xoá filter cũ để tránh lọc chồng
   deviceSearchInput.value = "";
   deviceStatusFilter.value = "";
+
+  // Reset Tab trạng thái về "Tất cả" để hiển thị toàn bộ thiết bị trong tháng
+  currentTabStatus = "";
+  document
+    .querySelectorAll("#deviceStatusTabs .status-tab")
+    .forEach((t) => t.classList.remove("active"));
+  const allTab = document.querySelector(
+    "#deviceStatusTabs .status-tab:first-child",
+  );
+  if (allTab) allTab.classList.add("active");
 
   // Lưu filter tháng + reset về trang 1
   deviceDateFilter = { year, month };
