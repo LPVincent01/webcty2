@@ -1,10 +1,14 @@
 <!doctype html>
 <html lang="vi">
   <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
     <title>Thông tin thiết bị</title>
     <link rel="stylesheet" href="./style.css" />
+    <script src="https://unpkg.com/html5-qrcode"></script>
     <style>
       :root {
         --c-border: #e5e7eb;
@@ -171,6 +175,14 @@
     </style>
   </head>
   <body>
+    <!-- Modal Scanner (Loading spinner) -->
+    <div id="scannerModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); z-index:9999; flex-direction:column; align-items:center; justify-content:center;">
+      <div style="background:#fff; padding:20px; border-radius:8px; width:90%; max-width:400px; text-align:center;">
+        <h3 id="scanTitle" style="margin-top:0">Đang xử lý ảnh...</h3>
+        <div id="reader" style="width:100%; display:none;"></div>
+      </div>
+    </div>
+
     <main class="container">
       <h1>Thông tin thiết bị</h1>
       <div id="status" class="muted">Đang tải...</div>
@@ -289,7 +301,7 @@
           ? `
             <div class="image-preview">
               <h3>Hình ảnh thực tế gần nhất</h3>
-              <img src="${encodeURI(cleanPath)}" alt="Hình ảnh thực tế của ${obj.MaThietBi}" />
+              <img src="${encodeURI(cleanPath)}" alt="Hình ảnh thực tế của ${obj.MaTaiSan}" />
             </div>
           `
           : "";
@@ -321,7 +333,7 @@
             <div class="inventory">
               <h2>Kiểm kê tài sản</h2>
               <div class="small">Thiết bị: <strong>${
-                obj.MaThietBi || ""
+                obj.MaTaiSan || ""
               }</strong></div>
 
               <div class="inventory-row">
@@ -366,6 +378,10 @@
 
               <div class="inventory-actions">
                 <button class="btn-primary" onclick="addToQueue()">Thêm vào danh sách</button>
+                <label class="btn-primary" style="background-color: #10b981; border-color: #10b981; color: white; display:block; text-align:center; cursor:pointer;">
+                  📷 Quét mã tiếp theo
+                  <input type="file" accept="image/*" capture="environment" style="display:none;" onchange="handleFileScan(this)">
+                </label>
                 <button class="btn-secondary" onclick="clearInvForm()">Xoá nhập</button>
                 <button class="btn-secondary" onclick="submitKiemKeBulk()">Gửi tất cả về server</button>
                 <button class="btn-secondary" style="border-color: #b91c1c; color: #b91c1c;" onclick="clearQueue()">🗑 Xóa danh sách chờ</button>
@@ -397,7 +413,7 @@
         const ghiChu = document.getElementById("invNote").value;
         return {
           DotID: dotId,
-          MaThietBi: currentDevice.MaThietBi,
+          MaTaiSan: currentDevice.MaTaiSan,
           TrangThaiThucTe: trangThai,
           ViTriThucTe: viTri,
           NhanVienKiemKe: nhanVienKiemKe,
@@ -417,7 +433,7 @@
         let queue = loadQueue();
         const idx = queue.findIndex(
           (x) =>
-            x.MaThietBi === payload.MaThietBi &&
+            x.MaTaiSan === payload.MaTaiSan &&
             String(x.DotID) === String(payload.DotID),
         );
         if (idx >= 0) queue[idx] = payload;
@@ -445,23 +461,64 @@
             method: "POST",
             headers: {
               "Content-Type": "application/json",
-              "x-inventory-user": window.currentUsername || "",
             },
             body: JSON.stringify({ DotID: dotId, items: queue }),
           });
+
+          // Parse response (JSON hoặc TEXT)
+          const ct = res.headers.get("content-type") || "";
           const text = await res.text();
+          let result = null;
+
+          if (ct.includes("application/json")) {
+            try {
+              result = JSON.parse(text);
+            } catch (_) {
+              result = null;
+            }
+          }
+
           if (!res.ok) {
-            msg.textContent = "❌ Lỗi khi gửi: " + text;
+            const errorMsg =
+              result?.detail || result?.error || text || "Lỗi không xác định";
+            msg.innerHTML = `❌ <strong>Lỗi khi gửi:</strong> ${errorMsg}`;
+            if (result?.skipped > 0) {
+              msg.innerHTML += `<br>📌 Bỏ qua ${result.skipped} thiết bị (xem chi tiết dưới)`;
+              if (result.skippedDetails?.length) {
+                msg.innerHTML += `<ul>`;
+                result.skippedDetails.forEach((s) => {
+                  msg.innerHTML += `<li>${s.MaTaiSan}: ${s.reason}</li>`;
+                });
+                msg.innerHTML += `</ul>`;
+              }
+            }
             return;
           }
 
-          msg.textContent =
-            "✅ Đã gửi thành công " + queue.length + " thiết bị.";
+          // Thành công
+          const successMsg = result?.message || "Đã gửi thành công";
+          // [FIX] Cập nhật lại số lượng lưu thành công để tránh lỗi falsy 0
+          const processedCount =
+            result?.processed !== undefined ? result.processed : queue.length;
+
+          msg.innerHTML = `✅ ${successMsg}<br>📊 Lưu: ${processedCount} thiết bị`;
+
+          if (result?.skipped > 0) {
+            msg.innerHTML += `<br>⚠️ Bỏ qua: ${result.skipped} thiết bị`;
+            if (result.skippedDetails?.length) {
+              msg.innerHTML += `<ul style="margin-top: 4px; margin-left: 16px;">`;
+              result.skippedDetails.forEach((s) => {
+                msg.innerHTML += `<li><strong>${s.MaTaiSan}</strong>: ${s.reason}</li>`;
+              });
+              msg.innerHTML += `</ul>`;
+            }
+          }
+
           saveQueue([]);
           updateQueueHint();
         } catch (e) {
           console.error(e);
-          msg.textContent = "❌ Không kết nối được tới máy chủ.";
+          msg.textContent = `❌ Không kết nối được tới máy chủ: ${e.message}`;
         }
       }
 
@@ -473,7 +530,7 @@
         const fileInput = document.getElementById("invImage");
         const file = fileInput.files[0];
 
-        if (!currentDevice || !currentDevice.MaThietBi) {
+        if (!currentDevice || !currentDevice.MaTaiSan) {
           msg.textContent = "❌ Vui lòng tải thông tin thiết bị trước.";
           return;
         }
@@ -484,7 +541,7 @@
         }
 
         const formData = new FormData();
-        formData.append("maThietBi", currentDevice.MaThietBi);
+        formData.append("maTaiSan", currentDevice.MaTaiSan);
         formData.append(
           "dotId",
           document.getElementById("invDot").value || "1",
@@ -493,15 +550,24 @@
         // Gửi thêm tên nhân viên để database không bị "N/A"
         formData.append("nhanVien", window.currentUsername || "");
 
-        // 2. ĐƯA FILE ẢNH VÀO SAU CÙNG
+        // ĐƯA FILE ẢNH VÀO SAU CÙNG
         formData.append("image", file);
 
         try {
           msg.textContent = "Đang tải ảnh lên...";
-          const res = await fetch("/public/upload-image", {
-            method: "POST",
-            body: formData, // FormData tự động đặt header Content-Type đúng
-          });
+
+          // [FIX] Truyền maTaiSan và dotId qua URL Parameters để Multer đọc được ngay
+          const maTaiSan = currentDevice.MaTaiSan;
+          const dotId = document.getElementById("invDot").value || "1";
+
+          const res = await fetch(
+            `/public/upload-image?maTaiSan=${maTaiSan}&dotId=${dotId}`,
+            {
+              method: "POST",
+              body: formData, // FormData tự động đặt header Content-Type đúng
+            },
+          );
+
           /* ===== BẮT ĐẦU FIX: parse response an toàn (JSON hoặc TEXT) ===== */
           const ct = res.headers.get("content-type") || "";
           const text = await res.text();
@@ -532,8 +598,9 @@
           msg.textContent = `❌ Lỗi khi tải ảnh: ${e.message}`;
         }
       }
+
       /* ==========================
-           4) Luồng load trang từ QR
+           5) Luồng load trang từ QR
            ========================== */
       function assignCurrentUser() {
         const user = window.currentUsername || "";
@@ -592,6 +659,47 @@
       // Khởi động
       ensureUser();
       main();
+
+      // ==== Tính năng quét QR/Barcode bằng html5-qrcode (Camera gốc) ====
+      let html5QrCode = null;
+
+      function handleFileScan(input) {
+        if (!input.files || input.files.length === 0) return;
+        const file = input.files[0];
+
+        // Hiển thị modal loading
+        document.getElementById("scannerModal").style.display = "flex";
+
+        if (!html5QrCode) {
+          html5QrCode = new Html5Qrcode("reader");
+        }
+
+        html5QrCode.scanFile(file, /* showImage= */ false)
+          .then(decodedText => {
+            document.getElementById("scannerModal").style.display = "none";
+            // Thành công, điều hướng trang
+            let deviceId = decodedText;
+            try {
+              if (decodedText.startsWith("http")) {
+                const url = new URL(decodedText);
+                if (url.searchParams.has("id")) {
+                  deviceId = url.searchParams.get("id");
+                }
+              }
+            } catch (e) {
+              // Bỏ qua lỗi parse URL
+            }
+            window.location.href = "display.html?id=" + encodeURIComponent(deviceId);
+          })
+          .catch(err => {
+            document.getElementById("scannerModal").style.display = "none";
+            alert("Không nhận dạng được mã Barcode/QR trong ảnh. Vui lòng chụp rõ nét hơn!");
+          })
+          .finally(() => {
+            // Reset input để có thể chọn lại cùng 1 file ảnh nếu cần
+            input.value = "";
+          });
+      }
     </script>
   </body>
 </html>

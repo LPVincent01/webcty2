@@ -1,1333 +1,1132 @@
 <!doctype html>
 <html lang="vi">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Quản Lý Thiết Bị</title>
 
-    <!-- Icons & Chart -->
-    <link
-      rel="stylesheet"
-      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"
-    />
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Quản Lý Tài Sản Cố Định</title>
 
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <!-- Icons & Chart -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
 
-    <!-- Styles -->
-    <link rel="stylesheet" href="./style.css" />
-    <base href="/" />
-  </head>
-  <body>
-    <!-- Login Page -->
-    <div class="login-container" id="loginPage">
-      <!-- Logo góc trái trên cùng -->
-      <div class="login-logo">
-        <img src="styleimage/LOGO.JPG" alt="Springtex logo" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="./style.css" />
+  <base href="/" />
+</head>
+
+<body>
+  <!-- Login Page -->
+  <div class="login-container" id="loginPage">
+    <!-- Logo góc trái trên cùng -->
+    <div class="login-logo">
+      <img src="styleimage/LOGO.JPG" alt="Springtex logo" />
+    </div>
+    <!-- thêm id="loginForm" và class hidden -->
+    <div class="login-form hidden" id="loginForm">
+      <h1>Đăng nhập Hệ Thống EAM</h1>
+      <div class="form-group">
+        <label for="username">Tài khoản</label>
+        <input type="text" id="username" placeholder="Nhập tài khoản" />
       </div>
-      <!-- thêm id="loginForm" và class hidden -->
-      <div class="login-form hidden" id="loginForm">
-        <h1>Đăng nhập Hệ Thống EAM</h1>
-        <div class="form-group">
-          <label for="username">Tài khoản</label>
-          <input type="text" id="username" placeholder="Nhập tài khoản" />
+      <div class="form-group">
+        <label for="password">Mật khẩu</label>
+        <div class="password-wrapper">
+          <input type="password" id="password" placeholder="Nhập mật khẩu" />
+          <i class="fas fa-eye" id="togglePassword"></i>
         </div>
-        <div class="form-group">
-          <label for="password">Mật khẩu</label>
-          <div class="password-wrapper">
-            <input type="password" id="password" placeholder="Nhập mật khẩu" />
-            <i class="fas fa-eye" id="togglePassword"></i>
+      </div>
+      <button class="login-btn" id="loginBtn">Đăng nhập</button>
+    </div>
+  </div>
+
+  <!-- Main Application -->
+  <div class="app-container" id="appContainer" style="display: none">
+    <header class="header">
+      <style>
+        .chart-year-selector {
+          font-size: 1rem;
+          padding: 4px 8px;
+          border-radius: 4px;
+          border: 1px solid #ccc;
+        }
+
+        /* Nút làm mới dữ liệu */
+        .refresh-btn {
+          margin-left: 8px;
+          padding: 6px 12px;
+          border-radius: 4px;
+          border: none;
+          background-color: #3498db;
+          color: #fff;
+          cursor: pointer;
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          font-size: 0.9rem;
+        }
+
+        .refresh-btn i {
+          font-size: 0.9rem;
+        }
+      </style>
+      <div class="language-switcher">
+        <select id="languageSelector">
+          <option value="vi">🇻🇳 Tiếng Việt</option>
+          <option value="zh">🇨🇳 中文</option>
+        </select>
+      </div>
+      <h1>Quản Lý Tài Sản Cố Định</h1>
+      <div class="user-menu">
+        <img id="userAvatar" src="https://ui-avatars.com/api/?name=User&background=3498db&color=fff"
+          alt="User Avatar" />
+        <span id="currentUserText" class="current-user-text">Chưa đăng nhập</span>
+
+        <!-- NÚT LÀM MỚI DỮ LIỆU -->
+        <button class="refresh-btn" id="refreshDataBtn">
+          <i class="fas fa-rotate-right"></i>
+          Restore
+        </button>
+
+        <button class="logout-btn" id="logoutBtn">
+          <i class="fas fa-sign-out-alt"></i>
+          Đăng xuất
+        </button>
+      </div>
+    </header>
+
+    <div class="main-content">
+      <aside class="sidebar">
+        <ul class="sidebar-menu">
+          <li>
+            <a href="#" class="active" data-section="overview">
+              <i class="fa-solid fa-gauge-high icon-yellow"></i>
+              <span>Tổng Quan</span>
+            </a>
+          </li>
+
+          <li>
+            <a href="#" data-section="devices">
+              <i class="fa-solid fa-laptop icon-green"></i>
+              <span>Danh sách tài sản</span>
+            </a>
+          </li>
+
+          <li>
+            <a href="#" data-section="purchases">
+              <i class="fa-solid fa-receipt icon-orange"></i>
+              <span data-i18n="purchaseList">Thông tin mua hàng</span>
+            </a>
+          </li>
+
+          <li>
+            <a href="#" data-section="users">
+              <i class="fa-solid fa-users icon-red"></i>
+              <span>Danh sách người sử dụng</span>
+            </a>
+          </li>
+
+          <li>
+            <a href="#" data-section="chart">
+              <i class="fa-solid fa-chart-line icon-blue"></i>
+              <span>Biểu đồ thống kê</span>
+            </a>
+          </li>
+
+          <li id="menuAccountManagement" style="display: none">
+            <a href="#" data-section="accounts">
+              <i class="fa-solid fa-user-shield icon-red"></i>
+              <span data-i18n="accountManagement">Quản lý tài khoản</span>
+            </a>
+          </li>
+        </ul>
+      </aside>
+
+      <main class="content-area">
+        <!-- Overview Section -->
+        <section class="content-section" id="overviewSection">
+          <h2 class="section-title">Tổng Quan</h2>
+          <p class="section-description">
+            Thống kê tổng quan về hệ thống tài sản
+          </p>
+
+          <div class="dashboard-cards">
+            <div class="card clickable-card" id="card-total-devices">
+              <div class="card-header">
+                <h3 class="card-title">Tổng số tài sản</h3>
+                <div class="card-icon devices">
+                  <i class="fas fa-laptop"></i>
+                </div>
+              </div>
+              <div class="card-value" id="totalDevices">0</div>
+              <div class="card-footer" id="newDevicesText">Đang tải...</div>
+            </div>
+
+            <div class="card clickable-card" id="card-active-devices">
+              <div class="card-header">
+                <h3 class="card-title">Đang sử dụng</h3>
+                <div class="card-icon users">
+                  <i class="fas fa-user-check"></i>
+                </div>
+              </div>
+              <div class="card-value" id="activeDevices">0</div>
+              <div class="card-footer" id="activePercent">Đang tải...</div>
+            </div>
+
+            <div class="card clickable-card" id="card-maintenance-devices">
+              <div class="card-header">
+                <h3 class="card-title">Bảo Hành</h3>
+                <div class="card-icon maintenance">
+                  <i class="fas fa-tools"></i>
+                </div>
+              </div>
+              <div class="card-value" id="maintenanceDevices">0</div>
+              <div class="card-footer" id="maintenancePercent">
+                Đang tải...
+              </div>
+            </div>
+
+            <div class="card clickable-card" id="card-broken-devices">
+              <div class="card-header">
+                <h3 class="card-title">Hư Hỏng</h3>
+                <div class="card-icon broken">
+                  <i class="fas fa-triangle-exclamation"></i>
+                </div>
+              </div>
+              <div class="card-value" id="brokenDevices">0</div>
+              <div class="card-footer" id="brokenPercent">Đang tải...</div>
+            </div>
+
+            <div class="card clickable-card" id="card-available-devices">
+              <div class="card-header">
+                <h3 class="card-title">Sẵn sàng cấp phát</h3>
+                <div class="card-icon available">
+                  <i class="fas fa-box-open"></i>
+                </div>
+              </div>
+              <div class="card-value" id="availableDevices">0</div>
+              <div class="card-footer" id="availablePercent">Đang tải...</div>
+            </div>
           </div>
-        </div>
-        <button class="login-btn" id="loginBtn">Đăng nhập</button>
-      </div>
-    </div>
 
-    <!-- Main Application -->
-    <div class="app-container" id="appContainer" style="display: none">
-      <header class="header">
-        <style>
-          .chart-year-selector {
-            font-size: 1rem;
-            padding: 4px 8px;
-            border-radius: 4px;
-            border: 1px solid #ccc;
-          }
-
-          /* Nút làm mới dữ liệu */
-          .refresh-btn {
-            margin-left: 8px;
-            padding: 6px 12px;
-            border-radius: 4px;
-            border: none;
-            background-color: #3498db;
-            color: #fff;
-            cursor: pointer;
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            font-size: 0.9rem;
-          }
-          .refresh-btn i {
-            font-size: 0.9rem;
-          }
-        </style>
-        <div class="language-switcher">
-          <select id="languageSelector">
-            <option value="vi">🇻🇳 Tiếng Việt</option>
-            <option value="zh">🇨🇳 中文</option>
-          </select>
-        </div>
-        <h1>Quản Lý Thiết Bị</h1>
-        <div class="user-menu">
-          <img
-            id="userAvatar"
-            src="https://ui-avatars.com/api/?name=User&background=3498db&color=fff"
-            alt="User Avatar"
-          />
-          <span id="currentUserText" class="current-user-text"
-            >Chưa đăng nhập</span
-          >
-
-          <!-- NÚT LÀM MỚI DỮ LIỆU -->
-          <button class="refresh-btn" id="refreshDataBtn">
-            <i class="fas fa-rotate-right"></i>
-            Restore
-          </button>
-
-          <button class="logout-btn" id="logoutBtn">
-            <i class="fas fa-sign-out-alt"></i>
-            Đăng xuất
-          </button>
-        </div>
-      </header>
-
-      <div class="main-content">
-        <aside class="sidebar">
-          <ul class="sidebar-menu">
-            <li>
-              <a href="#" class="active" data-section="overview">
-                <i class="fa-solid fa-gauge-high icon-yellow"></i>
-                <span>Tổng Quan</span>
-              </a>
-            </li>
-
-            <li>
-              <a href="#" data-section="devices">
-                <i class="fa-solid fa-laptop icon-green"></i>
-                <span>Danh sách thiết bị</span>
-              </a>
-            </li>
-
-            <li>
-              <a href="#" data-section="purchases">
-                <i class="fa-solid fa-receipt icon-orange"></i>
-                <span data-i18n="purchaseList">Thông tin mua hàng</span>
-              </a>
-            </li>
-
-            <li>
-              <a href="#" data-section="users">
-                <i class="fa-solid fa-users icon-red"></i>
-                <span>Danh sách người sử dụng</span>
-              </a>
-            </li>
-
-            <li>
-              <a href="#" data-section="chart">
-                <i class="fa-solid fa-chart-line icon-blue"></i>
-                <span>Biểu đồ thống kê</span>
-              </a>
-            </li>
-
-            <li id="menuAccountManagement" style="display: none">
-              <a href="#" data-section="accounts">
-                <i class="fa-solid fa-user-shield icon-red"></i>
-                <span data-i18n="accountManagement">Quản lý tài khoản</span>
-              </a>
-            </li>
-          </ul>
-        </aside>
-
-        <main class="content-area">
-          <!-- Overview Section -->
-          <section class="content-section" id="overviewSection">
-            <h2 class="section-title">Tổng Quan</h2>
-            <p class="section-description">
-              Thống kê tổng quan về hệ thống thiết bị
-            </p>
-
-            <div class="dashboard-cards">
-              <div class="card clickable-card" id="card-total-devices">
-                <div class="card-header">
-                  <h3 class="card-title">Tổng số thiết bị</h3>
-                  <div class="card-icon devices">
-                    <i class="fas fa-laptop"></i>
-                  </div>
-                </div>
-                <div class="card-value" id="totalDevices">0</div>
-                <div class="card-footer" id="newDevicesText">Đang tải...</div>
-              </div>
-
-              <div class="card clickable-card" id="card-active-devices">
-                <div class="card-header">
-                  <h3 class="card-title">Đang sử dụng</h3>
-                  <div class="card-icon users">
-                    <i class="fas fa-user-check"></i>
-                  </div>
-                </div>
-                <div class="card-value" id="activeDevices">0</div>
-                <div class="card-footer" id="activePercent">Đang tải...</div>
-              </div>
-
-              <div class="card clickable-card" id="card-maintenance-devices">
-                <div class="card-header">
-                  <h3 class="card-title">Bảo Hành</h3>
-                  <div class="card-icon maintenance">
-                    <i class="fas fa-tools"></i>
-                  </div>
-                </div>
-                <div class="card-value" id="maintenanceDevices">0</div>
-                <div class="card-footer" id="maintenancePercent">
-                  Đang tải...
-                </div>
-              </div>
-
-              <div class="card clickable-card" id="card-broken-devices">
-                <div class="card-header">
-                  <h3 class="card-title">Hư Hỏng</h3>
-                  <div class="card-icon broken">
-                    <i class="fas fa-triangle-exclamation"></i>
-                  </div>
-                </div>
-                <div class="card-value" id="brokenDevices">0</div>
-                <div class="card-footer" id="brokenPercent">Đang tải...</div>
-              </div>
-
-              <div class="card clickable-card" id="card-available-devices">
-                <div class="card-header">
-                  <h3 class="card-title">Sẵn sàng cấp phát</h3>
-                  <div class="card-icon available">
-                    <i class="fas fa-box-open"></i>
-                  </div>
-                </div>
-                <div class="card-value" id="availableDevices">0</div>
-                <div class="card-footer" id="availablePercent">Đang tải...</div>
-              </div>
-            </div>
-
-            <div class="chart-container">
-              <h3 class="chart-title" data-i18n-base="monthlyStatsByYearPrefix">
-                Thống kê theo tháng (Năm
-                <span id="overviewChartYear1">2025</span>)
-              </h3>
-              <div class="chart-wrapper">
-                <canvas id="monthlyChart"></canvas>
-              </div>
-            </div>
-            <div class="chart-container">
-              <h3 class="chart-title" data-i18n-base="monthlyStatsByYearPrefix">
-                Thống kê theo tháng (Năm
-                <span id="overviewChartYear2">2026</span>)
-              </h3>
-              <div class="chart-wrapper">
-                <canvas id="monthlyChart2026"></canvas>
-              </div>
-            </div>
-          </section>
-
-          <!-- Devices Section -->
-          <section
-            class="content-section"
-            id="devicesSection"
-            style="display: none"
-          >
-            <div class="table-container">
-              <div
-                class="table-header"
-                style="padding-bottom: 0; border-bottom: none"
-              >
-                <h3
-                  style="
-                    margin: 0;
-                    margin-right: 20px;
-                    white-space: nowrap;
-                    display: flex;
-                    align-items: center;
-                    gap: 8px;
-                  "
-                >
-                  Danh sách thiết bị
-                  <span
-                    id="deviceCountLabel"
-                    style="font-weight: normal; color: #666; font-size: 0.9em"
-                    >(0)</span
-                  >
-                </h3>
-                <div class="table-filters" style="flex-grow: 1">
-                  <div
-                    style="position: relative; width: 100%; max-width: 400px"
-                  >
-                    <i
-                      class="fas fa-search"
-                      style="
-                        position: absolute;
-                        left: 12px;
-                        top: 50%;
-                        transform: translateY(-50%);
-                        color: #94a3b8;
-                      "
-                    ></i>
-                    <input
-                      type="text"
-                      id="deviceSearchInput"
-                      placeholder="Tìm kiếm mã, tên, serial..."
-                      style="
-                        padding-left: 36px;
-                        width: 100%;
-                        border-radius: 8px;
-                      "
-                    />
-                  </div>
-                  <select
-                    id="deviceStatusFilter"
-                    style="display: none"
-                  ></select>
-                </div>
-
-                <div class="table-actions">
-                  <input
-                    type="file"
-                    id="importDevicesExcelInput"
-                    accept=".xlsx,.xls"
-                    style="display: none"
-                  />
-                  <button
-                    class="btn btn-secondary"
-                    id="importDevicesExcelBtn"
-                    data-i18n="importExcel"
-                  >
-                    <i class="fas fa-file-import"></i>
-                    <span class="mobile-hide">Nhập Excel</span>
-                  </button>
-                  <button class="btn btn-primary" id="addDeviceBtn">
-                    <i class="fas fa-plus"></i>
-                    <span class="mobile-hide">Thêm thiết bị</span>
-                  </button>
-                  <button class="btn btn-success" id="exportDevicesExcelBtn">
-                    <i class="fas fa-file-excel"></i>
-                    <span class="mobile-hide">Xuất Excel</span>
-                  </button>
-                </div>
-              </div>
-
-              <div style="padding: 0 20px">
-                <div class="status-tabs-container" id="deviceStatusTabs">
-                  <button
-                    class="status-tab active"
-                    onclick="filterDeviceByTab('')"
-                  >
-                    Tất cả <span class="status-count" id="count-all">0</span>
-                  </button>
-                  <button
-                    class="status-tab"
-                    onclick="filterDeviceByTab('Sẵn sàng')"
-                  >
-                    Sẵn sàng
-                    <span class="status-count" id="count-available">0</span>
-                  </button>
-                  <button
-                    class="status-tab"
-                    onclick="filterDeviceByTab('Đang sử dụng')"
-                  >
-                    Đang sử dụng
-                    <span class="status-count" id="count-inuse">0</span>
-                  </button>
-                  <button
-                    class="status-tab"
-                    onclick="filterDeviceByTab('Bảo Hành')"
-                  >
-                    Bảo hành
-                    <span class="status-count" id="count-maintenance">0</span>
-                  </button>
-                  <button
-                    class="status-tab"
-                    onclick="filterDeviceByTab('Hư Hỏng')"
-                  >
-                    Hư hỏng
-                    <span class="status-count" id="count-broken">0</span>
-                  </button>
-                </div>
-              </div>
-
-              <table id="devicesTable">
-                <colgroup>
-                  <col style="width: 100px" />
-                  <col style="width: 180px" />
-                  <col style="width: 140px" />
-                  <col style="width: 120px" />
-                  <col style="width: 120px" />
-                  <col style="width: 140px" />
-                  <col style="width: 150px" />
-                  <col style="width: 120px" />
-                  <col style="width: 90px" />
-                  <col style="width: 100px" />
-                </colgroup>
-                <thead>
-                  <tr>
-                    <th class="sortable" data-sort-key="MaThietBi">Mã TB</th>
-                    <th
-                      class="sortable"
-                      data-sort-key="TenThietBi"
-                      data-i18n="deviceName"
-                    >
-                      MODEL
-                    </th>
-                    <th
-                      class="sortable"
-                      data-sort-key="LoaiThietBi"
-                      data-i18n="deviceType"
-                    >
-                      Loại thiết bị
-                    </th>
-                    <th class="sortable" data-sort-key="SerialSN">S/N</th>
-                    <th class="sortable" data-sort-key="NgayNhap">Ngày nhập</th>
-                    <th class="sortable" data-sort-key="Trangthai">
-                      Trạng thái
-                    </th>
-                    <th class="sortable" data-sort-key="Nguoisudung">
-                      Người sử dụng
-                    </th>
-                    <th class="sortable" data-sort-key="Vitri">Vị trí</th>
-                    <th data-i18n="image">Hình ảnh</th>
-                    <th>Thao tác</th>
-                  </tr>
-                </thead>
-                <tbody id="devicesTableBody"></tbody>
-              </table>
-              <div class="pagination-container" id="devicesPagination"></div>
-            </div>
-          </section>
-
-          <!-- Users Section -->
-          <section
-            class="content-section"
-            id="usersSection"
-            style="display: none"
-          >
-            <div class="table-container">
-              <div
-                class="table-header"
-                style="padding-bottom: 0; border-bottom: none"
-              >
-                <h3
-                  style="
-                    margin: 0;
-                    margin-right: 20px;
-                    white-space: nowrap;
-                    display: flex;
-                    align-items: center;
-                    gap: 8px;
-                  "
-                >
-                  Danh sách người sử dụng
-                  <span
-                    id="userCountLabel"
-                    style="font-weight: normal; color: #666; font-size: 0.9em"
-                    >(0)</span
-                  >
-                </h3>
-                <div class="table-filters" style="flex-grow: 1">
-                  <div
-                    style="position: relative; width: 100%; max-width: 400px"
-                  >
-                    <i
-                      class="fas fa-search"
-                      style="
-                        position: absolute;
-                        left: 12px;
-                        top: 50%;
-                        transform: translateY(-50%);
-                        color: #94a3b8;
-                      "
-                    ></i>
-                    <input
-                      type="text"
-                      id="userSearchInput"
-                      placeholder="Tìm kiếm theo tên, mã NV..."
-                      style="
-                        padding-left: 36px;
-                        width: 100%;
-                        border-radius: 8px;
-                      "
-                    />
-                  </div>
-                  <select
-                    id="userDepartmentFilter"
-                    style="
-                      border-radius: 8px;
-                      border: 1px solid #ddd;
-                      padding: 0.5rem;
-                    "
-                  >
-                    <option value="" data-i18n="allDepartments">
-                      Tất cả phòng ban
-                    </option>
-                    <option value="Tổ Cắt" data-i18n="department_cut">
-                      Tổ Cắt
-                    </option>
-                    <option value="Phòng Mẫu" data-i18n="department_sample">
-                      Phòng Mẫu
-                    </option>
-                    <option value="Chuyền May" data-i18n="department_sewing">
-                      Chuyền May
-                    </option>
-                    <option value="Hoàn Thành" data-i18n="department_finish">
-                      Hoàn Thành
-                    </option>
-                    <option
-                      value="Kỹ Thuật-Bảo Trì"
-                      data-i18n="department_maintenance"
-                    >
-                      Kỹ Thuật-Bảo Trì
-                    </option>
-                    <option value="IE" data-i18n="department_ie">IE</option>
-                    <option value="QC" data-i18n="department_qc">QC</option>
-                    <option value="Kho Vải" data-i18n="department_fabric_wh">
-                      Kho Vải
-                    </option>
-                    <option
-                      value="Kho Phụ Liệu"
-                      data-i18n="department_material_wh"
-                    >
-                      Kho Phụ Liệu
-                    </option>
-                    <option
-                      value="Kho Thành Phẩm"
-                      data-i18n="department_product_wh"
-                    >
-                      Kho Thành Phẩm
-                    </option>
-                    <option value="Hành Chính" data-i18n="department_admin">
-                      Hành Chính
-                    </option>
-                    <option
-                      value="Văn Phòng Sản Xuất"
-                      data-i18n="department_production_office"
-                    >
-                      Văn Phòng Sản Xuất
-                    </option>
-                    <option
-                      value="Văn Phòng Kho"
-                      data-i18n="department_warehouse_office"
-                    >
-                      Văn Phòng Kho
-                    </option>
-                    <option value="Theo đơn" data-i18n="department_order">
-                      Theo đơn
-                    </option>
-                    <option value="Khác" data-i18n="department_other">
-                      Khác
-                    </option>
-                  </select>
-                </div>
-
-                <div class="table-actions">
-                  <input
-                    type="file"
-                    id="importUsersExcelInput"
-                    accept=".xlsx,.xls"
-                    style="display: none"
-                  />
-                  <button
-                    class="btn btn-secondary"
-                    id="importUsersExcelBtn"
-                    data-i18n="importExcel"
-                  >
-                    <i class="fas fa-file-import"></i>
-                    <span class="mobile-hide">Nhập Excel</span>
-                  </button>
-                  <button class="btn btn-primary" id="addUserBtn">
-                    <i class="fas fa-plus"></i>
-                    <span class="mobile-hide">Thêm người dùng</span>
-                  </button>
-                  <button class="btn btn-success" id="exportUsersExcelBtn">
-                    <i class="fas fa-file-excel"></i>
-                    <span class="mobile-hide">Xuất Excel</span>
-                  </button>
-                </div>
-              </div>
-
-              <div style="padding: 0 20px">
-                <div class="status-tabs-container" id="userStatusTabs">
-                  <button
-                    class="status-tab active"
-                    onclick="filterUserByTab('')"
-                  >
-                    Tất cả
-                    <span class="status-count" id="count-user-all">0</span>
-                  </button>
-                  <button
-                    class="status-tab"
-                    onclick="filterUserByTab('Đang sử dụng')"
-                  >
-                    Đang sử dụng
-                    <span class="status-count" id="count-user-inuse">0</span>
-                  </button>
-                  <button
-                    class="status-tab"
-                    onclick="filterUserByTab('Chưa cấp')"
-                  >
-                    Chưa cấp
-                    <span class="status-count" id="count-user-empty">0</span>
-                  </button>
-                </div>
-              </div>
-
-              <table id="usersTable">
-                <colgroup>
-                  <col style="width: 110px" />
-                  <col style="width: 200px" />
-                  <col style="width: 160px" />
-                  <col style="width: 160px" />
-                  <col style="width: 120px" />
-                  <col style="width: 130px" />
-                  <col style="width: 110px" />
-                </colgroup>
-                <thead>
-                  <tr>
-                    <th class="sortable" data-sort-key="MaNV">Mã NV</th>
-                    <th class="sortable" data-sort-key="HoVaTen">Họ và tên</th>
-                    <th
-                      class="sortable"
-                      data-sort-key="Phongban"
-                      data-i18n="department"
-                    >
-                      Phòng ban
-                    </th>
-                    <th class="sortable" data-sort-key="Thietbisudung">
-                      Thiết bị sử dụng
-                    </th>
-                    <th class="sortable" data-sort-key="Ngaycap">Ngày cấp</th>
-                    <th class="sortable" data-sort-key="Trangthai">
-                      Trạng thái
-                    </th>
-                    <th>Thao tác</th>
-                  </tr>
-                </thead>
-                <tbody id="usersTableBody"></tbody>
-              </table>
-              <div class="pagination-container" id="usersPagination"></div>
-            </div>
-          </section>
-
-          <!-- Purchases Section -->
-          <section
-            class="content-section"
-            id="purchasesSection"
-            style="display: none"
-          >
-            <div class="table-container">
-              <div class="table-header">
-                <h3
-                  style="
-                    margin: 0;
-                    margin-right: 20px;
-                    white-space: nowrap;
-                    display: flex;
-                    align-items: center;
-                    gap: 8px;
-                  "
-                >
-                  Thông tin mua hàng
-                  <span
-                    id="purchaseCountLabel"
-                    style="font-weight: normal; color: #666; font-size: 0.9em"
-                    >(0)</span
-                  >
-                </h3>
-                <div class="table-filters" style="flex-grow: 1">
-                  <div
-                    style="position: relative; width: 100%; max-width: 400px"
-                  >
-                    <i
-                      class="fas fa-search"
-                      style="
-                        position: absolute;
-                        left: 12px;
-                        top: 50%;
-                        transform: translateY(-50%);
-                        color: #94a3b8;
-                      "
-                    ></i>
-                    <input
-                      type="text"
-                      id="purchaseSearchInput"
-                      placeholder="Tìm theo mã / tên thiết bị"
-                      data-i18n-placeholder="searchByDeviceCodeName"
-                      style="
-                        padding-left: 36px;
-                        width: 100%;
-                        border-radius: 8px;
-                      "
-                    />
-                  </div>
-                  <select
-                    id="purchaseSourceFilter"
-                    style="
-                      border-radius: 8px;
-                      border: 1px solid #ddd;
-                      padding: 0.5rem;
-                    "
-                  >
-                    <option value="" data-i18n="allPurchaseSources">
-                      Tất cả nguồn mua
-                    </option>
-                    <option value="VN">VN</option>
-                    <option value="CN">CN</option>
-                    <option value="OTHER" data-i18n="otherSource">
-                      Nguồn khác
-                    </option>
-                  </select>
-                </div>
-
-                <div class="table-actions">
-                  <button
-                    class="btn btn-primary"
-                    id="addPurchaseBtn"
-                    data-i18n="addPurchaseInfo"
-                  >
-                    <i class="fas fa-plus"></i>
-                    <span class="mobile-hide">Thêm mới</span>
-                  </button>
-                  <button
-                    class="btn btn-success"
-                    id="exportPurchasesExcelBtn"
-                    data-i18n="exportExcel"
-                  >
-                    <i class="fas fa-file-excel"></i>
-                    <span class="mobile-hide">Xuất Excel</span>
-                  </button>
-                </div>
-              </div>
-
-              <table id="purchasesTable">
-                <colgroup>
-                  <col style="width: 15%" />
-                  <col style="width: 25%" />
-                  <col style="width: 15%" />
-                  <col style="width: 15%" />
-                  <col style="width: 15%" />
-                  <col style="width: 10%" />
-                  <col style="width: 5%" />
-                </colgroup>
-                <thead>
-                  <tr>
-                    <th
-                      class="sortable"
-                      data-sort-key="MaThietBi"
-                      data-i18n="deviceCode"
-                    >
-                      Mã thiết bị
-                    </th>
-                    <th
-                      class="sortable"
-                      data-sort-key="TenThietBi"
-                      data-i18n="deviceName"
-                    >
-                      Model
-                    </th>
-                    <th
-                      class="sortable"
-                      data-sort-key="LoaiThietBi"
-                      data-i18n="deviceType"
-                    >
-                      Loại thiết bị
-                    </th>
-                    <th
-                      class="sortable"
-                      data-sort-key="NgayNhap"
-                      data-i18n="importDate"
-                    >
-                      Ngày nhập
-                    </th>
-                    <th
-                      class="sortable"
-                      data-sort-key="ThanhTien"
-                      data-i18n="amount"
-                    >
-                      Thành tiền
-                    </th>
-                    <th
-                      class="sortable"
-                      data-sort-key="NguonMua"
-                      data-i18n="purchaseSource"
-                    >
-                      Nguồn mua
-                    </th>
-                    <th data-i18n="actions">Thao tác</th>
-                  </tr>
-                </thead>
-                <tbody id="purchasesTableBody"></tbody>
-              </table>
-              <div class="pagination-container" id="purchasesPagination"></div>
-            </div>
-          </section>
-
-          <!-- Chart Section -->
-          <section
-            class="content-section"
-            id="chartSection"
-            style="display: none"
-          >
-            <h2 class="section-title">Biểu đồ thống kê</h2>
-            <p class="section-description" data-i18n="chartSectionDescription">
-              Thống kê thiết bị theo năm
-            </p>
-
-            <div class="chart-container">
-              <h3 class="chart-title" data-i18n-base="deviceStatusByYear">
-                <span data-i18n="deviceStatusByYear"
-                  >Tình hình thiết bị năm</span
-                >
-                <select
-                  id="yearlyChartYearSelector"
-                  class="chart-year-selector"
-                ></select>
-              </h3>
-              <div class="chart-wrapper">
-                <canvas id="yearlyChart"></canvas>
-              </div>
-            </div>
-
-            <div class="dashboard-cards">
-              <div class="card">
-                <div class="card-header">
-                  <h3 class="card-title" data-i18n="chart_total">
-                    Tổng số thiết bị
-                  </h3>
-                  <div class="card-icon devices">
-                    <i class="fas fa-laptop"></i>
-                  </div>
-                </div>
-                <div class="card-value" id="yearlyPurchased">0</div>
-                <div class="card-footer" data-i18n-base="devicesThisYear">
-                  thiết bị trong năm <span id="selectedYearText"></span>
-                </div>
-              </div>
-
-              <div class="card">
-                <div class="card-header">
-                  <h3 class="card-title" data-i18n="chart_in_use">
-                    Đang sử dụng
-                  </h3>
-                  <div class="card-icon users">
-                    <i class="fas fa-user-check"></i>
-                  </div>
-                </div>
-                <div class="card-value" id="yearlyActive">0</div>
-                <div
-                  class="card-footer"
-                  id="yearlyActivePercent"
-                  data-i18n-base="ofTotalDevicesInYear"
-                >
-                  0% tổng thiết bị
-                </div>
-              </div>
-
-              <div class="card">
-                <div class="card-header">
-                  <h3 class="card-title" data-i18n="chart_warranty">
-                    Bảo Hành
-                  </h3>
-                  <div class="card-icon maintenance">
-                    <i class="fas fa-tools"></i>
-                  </div>
-                </div>
-                <div class="card-value" id="yearlyMaintenance">0</div>
-                <div
-                  class="card-footer"
-                  id="yearlyMaintenancePercent"
-                  data-i18n-base="ofTotalDevicesInYear"
-                >
-                  0% tổng thiết bị
-                </div>
-              </div>
-
-              <div class="card">
-                <div class="card-header">
-                  <h3 class="card-title" data-i18n="chart_broken">Hư Hỏng</h3>
-                  <div class="card-icon broken">
-                    <i class="fas fa-triangle-exclamation"></i>
-                  </div>
-                </div>
-                <div class="card-value" id="yearlyBroken">0</div>
-                <div
-                  class="card-footer"
-                  id="yearlyBrokenPercent"
-                  data-i18n-base="ofTotalDevicesInYear"
-                >
-                  0% tổng thiết bị
-                </div>
-              </div>
-            </div>
-          </section>
-
-          <section
-            class="content-section"
-            id="accountsSection"
-            style="display: none"
-          >
-            <div class="table-container">
-              <div class="table-header">
-                <h3 class="table-title" data-i18n="accountListTitle">
-                  Quản lý tài khoản hệ thống
-                </h3>
-                <div class="table-actions">
-                  <button
-                    class="btn btn-primary"
-                    onclick="openAddAccountModal()"
-                    data-i18n="addAccount"
-                  >
-                    <i class="fas fa-plus"></i> Thêm tài khoản
-                  </button>
-                </div>
-              </div>
-              <table id="accountsTable">
-                <thead>
-                  <tr>
-                    <th data-i18n="acc_username">Tên đăng nhập</th>
-                    <th data-i18n="acc_displayName">Tên hiển thị</th>
-                    <th data-i18n="acc_role">Quyền (Role)</th>
-                    <th data-i18n="acc_password">Mật khẩu</th>
-                    <th data-i18n="acc_createdDate">Ngày tạo</th>
-                    <th data-i18n="acc_actions">Thao tác</th>
-                  </tr>
-                </thead>
-                <tbody id="accountsTableBody"></tbody>
-              </table>
-            </div>
-          </section>
-        </main>
-      </div>
-    </div>
-
-    <!-- Device Modal -->
-    <div class="modal" id="deviceModal">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h3 class="modal-title" id="deviceModalTitle">Thêm thiết bị mới</h3>
-          <button class="modal-close" id="closeDeviceModal">&times;</button>
-        </div>
-        <div class="modal-body">
-          <form id="deviceForm">
-            <input type="hidden" id="deviceId" />
-            <div class="form-row">
-              <label for="deviceCode" data-i18n="deviceCode">Mã thiết bị</label>
-              <input type="text" id="MaThietBi" placeholder="Mã thiết bị" />
-            </div>
-            <div class="form-row">
-              <label for="deviceName" data-i18n="deviceName"
-                >Tên thiết bị</label
-              >
-              <input type="text" id="TenThietBi" placeholder="Tên thiết bị" />
-            </div>
-            <div class="form-row">
-              <label data-i18n="deviceCategory">Phân loại thiết bị</label>
-              <div class="radio-group" id="deviceCategoryContainer">
-                <label
-                  ><input
-                    type="radio"
-                    name="deviceCategoryRadio"
-                    value="vanphong"
-                  />
-                  <span data-i18n="officeEquipment"
-                    >Thiết bị văn phòng</span
-                  ></label
-                >
-                <label
-                  ><input
-                    type="radio"
-                    name="deviceCategoryRadio"
-                    value="sanxuat"
-                  />
-                  <span data-i18n="productionEquipment"
-                    >Thiết bị sản xuất</span
-                  ></label
-                >
-                <label
-                  ><input
-                    type="radio"
-                    name="deviceCategoryRadio"
-                    value="vanchuyen"
-                  />
-                  <span data-i18n="transportationVehicle"
-                    >Phương tiện vận tải</span
-                  ></label
-                >
-                <label
-                  ><input
-                    type="radio"
-                    name="deviceCategoryRadio"
-                    value="quanly"
-                  />
-                  <span data-i18n="managementTool">Dụng cụ quản lý</span></label
-                >
-                <label
-                  ><input
-                    type="radio"
-                    name="deviceCategoryRadio"
-                    value="taisankhac"
-                  />
-                  <span data-i18n="otherAssets">Tài sản khác</span></label
-                >
-                <label
-                  ><input
-                    type="radio"
-                    name="deviceCategoryRadio"
-                    value="nhacua"
-                  />
-                  <span data-i18n="building">Nhà cửa, công trình</span></label
-                >
-              </div>
-            </div>
-            <div class="form-row" id="deviceDetailRow" style="display: none">
-              <label for="LoaiThietBi" data-i18n="detailedDevice"
-                >Thiết bị chi tiết</label
-              >
-              <select id="LoaiThietBi">
-                <option value="" data-i18n="selectDetailedDevice">
-                  Chọn thiết bị chi tiết...
-                </option>
+          <div class="chart-container">
+            <h3 class="chart-title">
+              <span data-i18n="monthlyStatsByYearPrefix">Thống kê theo tháng năm</span>
+              <select id="monthlyChartYearSelector" class="chart-year-selector">
+                <option value="2025">2025</option>
+                <option value="2026" selected>2026</option>
               </select>
+            </h3>
+            <div class="chart-wrapper">
+              <canvas id="monthlyChart"></canvas>
             </div>
-            <div class="form-row">
-              <label for="deviceSerial" data-i18n="serialNumber"
-                >Serial(S/N)</label
-              >
-              <input type="text" id="SerialSN" placeholder="Serial" />
+          </div>
+        </section>
+
+        <!-- Devices Section -->
+        <section class="content-section" id="devicesSection" style="display: none">
+          <div class="table-container">
+            <div class="table-header" style="padding-bottom: 0; border-bottom: none">
+              <h3 style="
+                    margin: 0;
+                    margin-right: 20px;
+                    white-space: nowrap;
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                  ">
+                <span class="table-title" data-i18n="deviceListTitle">Danh sách tài sản</span>
+                <span id="deviceCountLabel" style="font-weight: normal; color: #666; font-size: 0.9em">(0)</span>
+              </h3>
+              <div class="table-filters" style="
+                    flex-grow: 1;
+                    display: flex;
+                    gap: 10px;
+                    flex-wrap: wrap;
+                    align-items: center;
+                  ">
+                <div style="position: relative; width: 100%; max-width: 300px">
+                  <i class="fas fa-search" style="
+                        position: absolute;
+                        left: 12px;
+                        top: 50%;
+                        transform: translateY(-50%);
+                        color: #94a3b8;
+                      "></i>
+                  <input type="text" id="deviceSearchInput" placeholder="Tìm kiếm mã, tên, serial..." style="
+                        padding-left: 36px;
+                        width: 100%;
+                        border-radius: 8px;
+                        height: 36px;
+                        border: 1px solid #ddd;
+                      " />
+                </div>
+
+                <div style="
+                      display: flex;
+                      gap: 8px;
+                      align-items: center;
+                      flex-wrap: wrap;
+                    ">
+                  <select id="dynamicFilterType1" style="
+                        border-radius: 8px;
+                        border: 1px solid #ddd;
+                        padding: 0 10px;
+                        height: 36px;
+                        outline: none;
+                        font-size: 0.9rem;
+                      ">
+                    <option value="" data-i18n="filterCondition1">
+                      -- Điều kiện 1 --
+                    </option>
+                    <option value="prefix" data-i18n="filterByPrefix">
+                      Theo Mã tài sản
+                    </option>
+                    <option value="type" data-i18n="filterByType">
+                      Theo Loại tài sản
+                    </option>
+                    <option value="date" data-i18n="filterByDate">
+                      Theo Ngày nhập
+                    </option>
+                    <option value="currentMonth" data-i18n="filterByCurrentMonth">
+                      Theo Tháng hiện tại
+                    </option>
+                  </select>
+                  <div id="dynamicFilterValueContainer1" style="display: none"></div>
+
+                  <select id="dynamicFilterType2" style="
+                        border-radius: 8px;
+                        border: 1px solid #ddd;
+                        padding: 0 10px;
+                        height: 36px;
+                        outline: none;
+                        font-size: 0.9rem;
+                      ">
+                    <option value="" data-i18n="filterCondition2">
+                      -- Điều kiện 2 --
+                    </option>
+                    <option value="prefix" data-i18n="filterByPrefix">
+                      Theo Mã tài sản
+                    </option>
+                    <option value="type" data-i18n="filterByType">
+                      Theo Loại tài sản
+                    </option>
+                    <option value="date" data-i18n="filterByDate">
+                      Theo Ngày nhập
+                    </option>
+                    <option value="currentMonth" data-i18n="filterByCurrentMonth">
+                      Theo Tháng hiện tại
+                    </option>
+                  </select>
+                  <div id="dynamicFilterValueContainer2" style="display: none"></div>
+
+                  <button id="btnExecuteSearch" style="
+                        height: 36px;
+                        padding: 0 16px;
+                        border-radius: 8px;
+                        border: none;
+                        background-color: #3b82f6;
+                        color: white;
+                        cursor: pointer;
+                        display: flex;
+                        align-items: center;
+                        gap: 6px;
+                        font-weight: 500;
+                      ">
+                    <i class="fas fa-search"></i>
+                    <span data-i18n="btnSearchExecute">Tra cứu</span>
+                  </button>
+                </div>
+
+                <select id="deviceStatusFilter" style="display: none"></select>
+              </div>
+
+              <div class="table-actions">
+                <input type="file" id="importDevicesExcelInput" accept=".xlsx,.xls" style="display: none" />
+                <button class="btn btn-secondary" id="importDevicesExcelBtn" data-i18n="importExcel">
+                  <i class="fas fa-file-import"></i>
+                  <span class="mobile-hide">Nhập Excel</span>
+                </button>
+                <button class="btn btn-primary" id="addDeviceBtn">
+                  <i class="fas fa-plus"></i>
+                  <span class="mobile-hide">Thêm tài sản</span>
+                </button>
+                <button class="btn btn-success" id="exportDevicesExcelBtn">
+                  <i class="fas fa-file-excel"></i>
+                  <span class="mobile-hide">Xuất Excel</span>
+                </button>
+              </div>
             </div>
-            <div class="form-row">
-              <label for="purchaseDate" data-i18n="importDate">Ngày nhập</label>
-              <input type="date" id="NgayNhap" />
+
+            <div style="padding: 0 20px">
+              <div class="status-tabs-container" id="deviceStatusTabs">
+                <button class="status-tab active" onclick="filterDeviceByTab('')">
+                  <span data-i18n="tabAll">Tất cả</span>
+                  <span class="status-count" id="count-all">0</span>
+                </button>
+                <button class="status-tab" onclick="filterDeviceByTab('Sẵn sàng')">
+                  <span data-i18n="status_available">Sẵn sàng</span>
+                  <span class="status-count" id="count-available">0</span>
+                </button>
+                <button class="status-tab" onclick="filterDeviceByTab('Đang sử dụng')">
+                  <span data-i18n="status_in_use">Đang sử dụng</span>
+                  <span class="status-count" id="count-inuse">0</span>
+                </button>
+                <button class="status-tab" onclick="filterDeviceByTab('Bảo Hành')">
+                  <span data-i18n="status_warranty">Bảo hành</span>
+                  <span class="status-count" id="count-maintenance">0</span>
+                </button>
+                <button class="status-tab" onclick="filterDeviceByTab('Hư Hỏng')">
+                  <span data-i18n="status_broken">Hư hỏng</span>
+                  <span class="status-count" id="count-broken">0</span>
+                </button>
+              </div>
             </div>
-            <div class="form-row">
-              <label for="deviceStatus" data-i18n="status">Trạng thái</label>
-              <select id="Trangthai">
-                <option value="" data-i18n="selectStatus">
-                  Chọn trạng thái
-                </option>
-                <option value="Đang sử dụng" data-i18n="status_in_use">
+
+            <table id="devicesTable">
+              <colgroup>
+                <col style="width: 50px" />
+                <col style="width: 100px" />
+                <col style="width: 180px" />
+                <col style="width: 140px" />
+                <col style="width: 120px" />
+                <col style="width: 120px" />
+                <col style="width: 140px" />
+                <col style="width: 150px" />
+                <col style="width: 120px" />
+                <col style="width: 90px" />
+                <col style="width: 100px" />
+              </colgroup>
+              <thead>
+                <tr>
+                  <th>STT</th>
+                  <th class="sortable" data-sort-key="MaTaiSan">Mã TB</th>
+                  <th class="sortable" data-sort-key="TenTaiSan" data-i18n="deviceName">
+                    MODEL
+                  </th>
+                  <th class="sortable" data-sort-key="LoaiTaiSan" data-i18n="deviceType">
+                    Loại tài sản
+                  </th>
+                  <th class="sortable" data-sort-key="SerialSN">S/N</th>
+                  <th class="sortable" data-sort-key="NgayNhap">Ngày nhập</th>
+                  <th class="sortable" data-sort-key="Trangthai">
+                    Trạng thái
+                  </th>
+                  <th class="sortable" data-sort-key="Nguoisudung">
+                    Người sử dụng
+                  </th>
+                  <th class="sortable" data-sort-key="Vitri">Vị trí</th>
+                  <th data-i18n="image">Hình ảnh</th>
+                  <th>Thao tác</th>
+                </tr>
+              </thead>
+              <tbody id="devicesTableBody"></tbody>
+            </table>
+            <div class="pagination-container" id="devicesPagination"></div>
+          </div>
+        </section>
+
+        <!-- Users Section -->
+        <section class="content-section" id="usersSection" style="display: none">
+          <div class="table-container">
+            <div class="table-header" style="padding-bottom: 0; border-bottom: none">
+              <h3 style="
+                    margin: 0;
+                    margin-right: 20px;
+                    white-space: nowrap;
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                  ">
+                <span class="table-title" data-i18n="userListTitle">Danh sách người sử dụng</span>
+                <span id="userCountLabel" style="font-weight: normal; color: #666; font-size: 0.9em">(0)</span>
+              </h3>
+              <div class="table-filters" style="flex-grow: 1">
+                <div style="position: relative; width: 100%; max-width: 400px">
+                  <i class="fas fa-search" style="
+                        position: absolute;
+                        left: 12px;
+                        top: 50%;
+                        transform: translateY(-50%);
+                        color: #94a3b8;
+                      "></i>
+                  <input type="text" id="userSearchInput" placeholder="Tìm kiếm theo tên, mã NV..." style="
+                        padding-left: 36px;
+                        width: 100%;
+                        border-radius: 8px;
+                      " />
+                </div>
+                <select id="userDepartmentFilter" style="
+                      border-radius: 8px;
+                      border: 1px solid #ddd;
+                      padding: 0.5rem;
+                    ">
+                  <option value="" data-i18n="allDepartments">
+                    Tất cả phòng ban
+                  </option>
+                  <option value="Tổ Cắt" data-i18n="department_cut">
+                    Tổ Cắt
+                  </option>
+                  <option value="Phòng Mẫu" data-i18n="department_sample">
+                    Phòng Mẫu
+                  </option>
+                  <option value="Chuyền May" data-i18n="department_sewing">
+                    Chuyền May
+                  </option>
+                  <option value="Hoàn Thành" data-i18n="department_finish">
+                    Hoàn Thành
+                  </option>
+                  <option value="Kỹ Thuật-Bảo Trì" data-i18n="department_maintenance">
+                    Kỹ Thuật-Bảo Trì
+                  </option>
+                  <option value="IE" data-i18n="department_ie">IE</option>
+                  <option value="QC" data-i18n="department_qc">QC</option>
+                  <option value="Kho Vải" data-i18n="department_fabric_wh">
+                    Kho Vải
+                  </option>
+                  <option value="Kho Phụ Liệu" data-i18n="department_material_wh">
+                    Kho Phụ Liệu
+                  </option>
+                  <option value="Kho Thành Phẩm" data-i18n="department_product_wh">
+                    Kho Thành Phẩm
+                  </option>
+                  <option value="Hành Chính" data-i18n="department_admin">
+                    Hành Chính
+                  </option>
+                  <option value="Văn Phòng Sản Xuất" data-i18n="department_production_office">
+                    Văn Phòng Sản Xuất
+                  </option>
+                  <option value="Văn Phòng Kho" data-i18n="department_warehouse_office">
+                    Văn Phòng Kho
+                  </option>
+                  <option value="Theo đơn" data-i18n="department_order">
+                    Theo đơn
+                  </option>
+                  <option value="Khác" data-i18n="department_other">
+                    Khác
+                  </option>
+                </select>
+              </div>
+
+              <div class="table-actions">
+                <input type="file" id="importUsersExcelInput" accept=".xlsx,.xls" style="display: none" />
+                <button class="btn btn-secondary" id="importUsersExcelBtn" data-i18n="importExcel">
+                  <i class="fas fa-file-import"></i>
+                  <span class="mobile-hide">Nhập Excel</span>
+                </button>
+                <button class="btn btn-primary" id="addUserBtn">
+                  <i class="fas fa-plus"></i>
+                  <span class="mobile-hide">Thêm người dùng</span>
+                </button>
+                <button class="btn btn-success" id="exportUsersExcelBtn">
+                  <i class="fas fa-file-excel"></i>
+                  <span class="mobile-hide">Xuất Excel</span>
+                </button>
+              </div>
+            </div>
+
+            <div style="padding: 0 20px">
+              <div class="status-tabs-container" id="userStatusTabs">
+                <button class="status-tab active" onclick="filterUserByTab('')">
+                  <span data-i18n="tabAll">Tất cả</span>
+                  <span class="status-count" id="count-user-all">0</span>
+                </button>
+                <button class="status-tab" onclick="filterUserByTab('Đang sử dụng')">
+                  <span data-i18n="status_in_use">Đang sử dụng</span>
+                  <span class="status-count" id="count-user-inuse">0</span>
+                </button>
+                <button class="status-tab" onclick="filterUserByTab('Chưa cấp')">
+                  <span data-i18n="status_not_issued">Chưa cấp</span>
+                  <span class="status-count" id="count-user-empty">0</span>
+                </button>
+              </div>
+            </div>
+
+            <table id="usersTable">
+              <colgroup>
+                <col style="width: 110px" />
+                <col style="width: 200px" />
+                <col style="width: 160px" />
+                <col style="width: 160px" />
+                <col style="width: 120px" />
+                <col style="width: 130px" />
+                <col style="width: 110px" />
+              </colgroup>
+              <thead>
+                <tr>
+                  <th class="sortable" data-sort-key="MaNV">Mã NV</th>
+                  <th class="sortable" data-sort-key="HoVaTen">Họ và tên</th>
+                  <th class="sortable" data-sort-key="Phongban" data-i18n="department">
+                    Phòng ban
+                  </th>
+                  <th class="sortable" data-sort-key="Thietbisudung">
+                    Tài sản sử dụng
+                  </th>
+                  <th class="sortable" data-sort-key="Ngaycap">Ngày cấp</th>
+                  <th class="sortable" data-sort-key="Trangthai">
+                    Trạng thái
+                  </th>
+                  <th>Thao tác</th>
+                </tr>
+              </thead>
+              <tbody id="usersTableBody"></tbody>
+            </table>
+            <div class="pagination-container" id="usersPagination"></div>
+          </div>
+        </section>
+
+        <!-- Purchases Section -->
+        <section class="content-section" id="purchasesSection" style="display: none">
+          <div class="table-container">
+            <div class="table-header">
+              <h3 style="
+                    margin: 0;
+                    margin-right: 20px;
+                    white-space: nowrap;
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                  ">
+                <span class="table-title" data-i18n="purchaseInfo">Thông tin mua hàng</span>
+                <span id="purchaseCountLabel" style="font-weight: normal; color: #666; font-size: 0.9em">(0)</span>
+              </h3>
+              <div class="table-filters" style="flex-grow: 1">
+                <div style="position: relative; width: 100%; max-width: 400px">
+                  <i class="fas fa-search" style="
+                        position: absolute;
+                        left: 12px;
+                        top: 50%;
+                        transform: translateY(-50%);
+                        color: #94a3b8;
+                      "></i>
+                  <input type="text" id="purchaseSearchInput" placeholder="Tìm theo mã / tên tài sản"
+                    data-i18n-placeholder="searchByDeviceCodeName" style="
+                        padding-left: 36px;
+                        width: 100%;
+                        border-radius: 8px;
+                      " />
+                </div>
+                <select id="purchaseSourceFilter" style="
+                      border-radius: 8px;
+                      border: 1px solid #ddd;
+                      padding: 0.5rem;
+                    ">
+                  <option value="" data-i18n="allPurchaseSources">
+                    Tất cả nguồn mua
+                  </option>
+                  <option value="VN">VN</option>
+                  <option value="CN">CN</option>
+                  <option value="OTHER" data-i18n="otherSource">
+                    Nguồn khác
+                  </option>
+                </select>
+              </div>
+
+              <div class="table-actions">
+                <button class="btn btn-primary" id="addPurchaseBtn" data-i18n="addPurchaseInfo">
+                  <i class="fas fa-plus"></i>
+                  <span class="mobile-hide">Thêm mới</span>
+                </button>
+                <button class="btn btn-success" id="exportPurchasesExcelBtn" data-i18n="exportExcel">
+                  <i class="fas fa-file-excel"></i>
+                  <span class="mobile-hide">Xuất Excel</span>
+                </button>
+              </div>
+            </div>
+
+            <table id="purchasesTable">
+              <colgroup>
+                <col style="width: 15%" />
+                <col style="width: 25%" />
+                <col style="width: 15%" />
+                <col style="width: 15%" />
+                <col style="width: 15%" />
+                <col style="width: 10%" />
+                <col style="width: 5%" />
+              </colgroup>
+              <thead>
+                <tr>
+                  <th class="sortable" data-sort-key="MaTaiSan" data-i18n="deviceCode">
+                    Mã tài sản
+                  </th>
+                  <th class="sortable" data-sort-key="TenTaiSan" data-i18n="deviceName">
+                    Model
+                  </th>
+                  <th class="sortable" data-sort-key="LoaiTaiSan" data-i18n="deviceType">
+                    Loại tài sản
+                  </th>
+                  <th class="sortable" data-sort-key="NgayNhap" data-i18n="importDate">
+                    Ngày nhập
+                  </th>
+                  <th class="sortable" data-sort-key="ThanhTien" data-i18n="amount">
+                    Thành tiền
+                  </th>
+                  <th class="sortable" data-sort-key="NguonMua" data-i18n="purchaseSource">
+                    Nguồn mua
+                  </th>
+                  <th data-i18n="actions">Thao tác</th>
+                </tr>
+              </thead>
+              <tbody id="purchasesTableBody"></tbody>
+            </table>
+            <div class="pagination-container" id="purchasesPagination"></div>
+          </div>
+        </section>
+
+        <!-- Chart Section -->
+        <section class="content-section" id="chartSection" style="display: none">
+          <h2 class="section-title">Biểu đồ thống kê</h2>
+          <p class="section-description" data-i18n="chartSectionDescription">
+            Thống kê tài sản theo năm
+          </p>
+
+          <div class="chart-container">
+            <h3 class="chart-title" data-i18n-base="deviceStatusByYear">
+              <span data-i18n="deviceStatusByYear">Tình hình tài sản năm</span>
+              <select id="yearlyChartYearSelector" class="chart-year-selector"></select>
+            </h3>
+            <div class="chart-wrapper">
+              <canvas id="yearlyChart"></canvas>
+            </div>
+          </div>
+
+          <div class="dashboard-cards">
+            <div class="card">
+              <div class="card-header">
+                <h3 class="card-title" data-i18n="chart_total">
+                  Tổng số tài sản
+                </h3>
+                <div class="card-icon devices">
+                  <i class="fas fa-laptop"></i>
+                </div>
+              </div>
+              <div class="card-value" id="yearlyPurchased">0</div>
+              <div class="card-footer" data-i18n-base="devicesThisYear">
+                tài sản trong năm <span id="selectedYearText"></span>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-header">
+                <h3 class="card-title" data-i18n="chart_in_use">
                   Đang sử dụng
-                </option>
-                <option value="Bảo Hành" data-i18n="status_warranty">
+                </h3>
+                <div class="card-icon users">
+                  <i class="fas fa-user-check"></i>
+                </div>
+              </div>
+              <div class="card-value" id="yearlyActive">0</div>
+              <div class="card-footer" id="yearlyActivePercent" data-i18n-base="ofTotalDevicesInYear">
+                0% tổng tài sản
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-header">
+                <h3 class="card-title" data-i18n="chart_warranty">
                   Bảo Hành
-                </option>
-                <option value="Sẵn sàng" data-i18n="status_available">
-                  Sẵn sàng
-                </option>
-                <option value="Hư Hỏng" data-i18n="status_broken">
-                  Hư Hỏng
-                </option>
-                <!-- mới thêm -->
-              </select>
+                </h3>
+                <div class="card-icon maintenance">
+                  <i class="fas fa-tools"></i>
+                </div>
+              </div>
+              <div class="card-value" id="yearlyMaintenance">0</div>
+              <div class="card-footer" id="yearlyMaintenancePercent" data-i18n-base="ofTotalDevicesInYear">
+                0% tổng tài sản
+              </div>
             </div>
-            <div class="form-row">
-              <label for="deviceUser" data-i18n="userOptional"
-                >Người sử dụng (nếu có)</label
-              >
-              <select id="Nguoisudung">
-                <option value="" data-i18n="noUser">Không có</option>
-                <!-- Users will be loaded here -->
-              </select>
+
+            <div class="card">
+              <div class="card-header">
+                <h3 class="card-title" data-i18n="chart_broken">Hư Hỏng</h3>
+                <div class="card-icon broken">
+                  <i class="fas fa-triangle-exclamation"></i>
+                </div>
+              </div>
+              <div class="card-value" id="yearlyBroken">0</div>
+              <div class="card-footer" id="yearlyBrokenPercent" data-i18n-base="ofTotalDevicesInYear">
+                0% tổng tài sản
+              </div>
             </div>
-            <div class="form-row">
-              <label for="Vitri">Vị trí</label>
-              <input
-                type="text"
-                id="Vitri"
-                placeholder="VD: Tầng 2 - Phòng Kế toán"
-              />
+          </div>
+        </section>
+
+        <section class="content-section" id="accountsSection" style="display: none">
+          <div class="table-container">
+            <div class="table-header">
+              <h3 class="table-title" data-i18n="accountListTitle">
+                Quản lý tài khoản hệ thống
+              </h3>
+              <div class="table-actions">
+                <button class="btn btn-primary" onclick="openAddAccountModal()" data-i18n="addAccount">
+                  <i class="fas fa-plus"></i> Thêm tài khoản
+                </button>
+              </div>
             </div>
-          </form>
-        </div>
-        <div class="modal-footer">
-          <button class="btn btn-danger" id="cancelDeviceBtn">Hủy</button>
-          <button class="btn btn-success" id="saveDeviceBtn" data-i18n="save">
-            Lưu
-          </button>
-        </div>
+            <table id="accountsTable">
+              <thead>
+                <tr>
+                  <th data-i18n="acc_username">Tên đăng nhập</th>
+                  <th data-i18n="acc_displayName">Tên hiển thị</th>
+                  <th data-i18n="acc_role">Quyền (Role)</th>
+                  <th data-i18n="acc_password">Mật khẩu</th>
+                  <th data-i18n="acc_createdDate">Ngày tạo</th>
+                  <th data-i18n="acc_actions">Thao tác</th>
+                </tr>
+              </thead>
+              <tbody id="accountsTableBody"></tbody>
+            </table>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <!-- Device Modal -->
+  <div class="modal" id="deviceModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 class="modal-title" id="deviceModalTitle">Thêm tài sản mới</h3>
+        <button class="modal-close" id="closeDeviceModal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <form id="deviceForm">
+          <input type="hidden" id="deviceId" />
+          <div class="form-row">
+            <label for="deviceCode" data-i18n="deviceCode">Mã tài sản</label>
+            <input type="text" id="MaTaiSan" placeholder="Mã tài sản" />
+          </div>
+          <div class="form-row">
+            <label for="deviceName" data-i18n="deviceName">Tên tài sản</label>
+            <input type="text" id="TenTaiSan" placeholder="Tên tài sản" />
+          </div>
+          <div class="form-row">
+            <label data-i18n="deviceCategory">Phân loại thiết bị</label>
+            <div class="radio-group" id="deviceCategoryContainer">
+              <label><input type="radio" name="deviceCategoryRadio" value="vanphong" />
+                <span data-i18n="officeEquipment">Thiết bị văn phòng</span></label>
+              <label><input type="radio" name="deviceCategoryRadio" value="sanxuat" />
+                <span data-i18n="productionEquipment">Thiết bị sản xuất</span></label>
+              <label><input type="radio" name="deviceCategoryRadio" value="vanchuyen" />
+                <span data-i18n="transportationVehicle">Phương tiện vận tải</span></label>
+              <label><input type="radio" name="deviceCategoryRadio" value="quanly" />
+                <span data-i18n="managementTool">Dụng cụ quản lý</span></label>
+              <label><input type="radio" name="deviceCategoryRadio" value="taisankhac" />
+                <span data-i18n="otherAssets">Tài sản khác</span></label>
+              <label><input type="radio" name="deviceCategoryRadio" value="nhacua" />
+                <span data-i18n="building">Nhà cửa, công trình</span></label>
+            </div>
+          </div>
+          <div class="form-row" id="deviceDetailRow" style="display: none">
+            <label for="LoaiTaiSan" data-i18n="detailedDevice">Thiết bị chi tiết</label>
+            <select id="LoaiTaiSan">
+              <option value="" data-i18n="selectDetailedDevice">
+                Chọn thiết bị chi tiết...
+              </option>
+            </select>
+          </div>
+          <div class="form-row">
+            <label for="deviceSerial" data-i18n="serialNumber">Serial(S/N)</label>
+            <input type="text" id="SerialSN" placeholder="Serial" />
+          </div>
+          <div class="form-row">
+            <label for="purchaseDate" data-i18n="importDate">Ngày nhập</label>
+            <input type="date" id="NgayNhap" />
+          </div>
+          <div class="form-row">
+            <label for="deviceStatus" data-i18n="status">Trạng thái</label>
+            <select id="Trangthai">
+              <option value="" data-i18n="selectStatus">
+                Chọn trạng thái
+              </option>
+              <option value="Đang sử dụng" data-i18n="status_in_use">
+                Đang sử dụng
+              </option>
+              <option value="Bảo Hành" data-i18n="status_warranty">
+                Bảo Hành
+              </option>
+              <option value="Sẵn sàng" data-i18n="status_available">
+                Sẵn sàng
+              </option>
+              <option value="Hư Hỏng" data-i18n="status_broken">
+                Hư Hỏng
+              </option>
+              <!-- mới thêm -->
+            </select>
+          </div>
+          <div class="form-row">
+            <label for="deviceUser" data-i18n="userOptional">Người sử dụng (nếu có)</label>
+            <select id="Nguoisudung">
+              <option value="" data-i18n="noUser">Không có</option>
+              <!-- Users will be loaded here -->
+            </select>
+          </div>
+          <div class="form-row">
+            <label for="Vitri">Vị trí</label>
+            <input type="text" id="Vitri" placeholder="VD: Tầng 2 - Phòng Kế toán" />
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-danger" id="cancelDeviceBtn">Hủy</button>
+        <button class="btn btn-success" id="saveDeviceBtn" data-i18n="save">
+          Lưu
+        </button>
       </div>
     </div>
+  </div>
 
-    <!-- User Modal -->
-    <div class="modal" id="userModal">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h3 class="modal-title" id="userModalTitle">Thêm người dùng mới</h3>
-          <button class="modal-close" id="closeUserModal">&times;</button>
-        </div>
-        <div class="modal-body">
-          <form id="userForm">
-            <input type="hidden" id="userId" />
-            <div class="form-row">
-              <label for="userCode" data-i18n="employeeId">Mã nhân viên</label>
-              <input type="text" id="userCode" required />
-            </div>
-            <div class="form-row">
-              <label for="userName" data-i18n="fullName">Họ và tên</label>
-              <input type="text" id="userName" required />
-            </div>
-            <div class="form-row">
-              <label for="userDepartment" data-i18n="department"
-                >Phòng ban</label
-              >
-              <select id="userDepartment" required>
-                <option value="" data-i18n="selectDepartment">
-                  Chọn phòng ban
-                </option>
-                <option value="Tổ Cắt" data-i18n="department_cut">
-                  Tổ Cắt
-                </option>
-                <option value="Phòng Mẫu" data-i18n="department_sample">
-                  Phòng Mẫu
-                </option>
-                <option value="Chuyền May" data-i18n="department_sewing">
-                  Chuyền May
-                </option>
-                <option value="Hoàn Thành" data-i18n="department_finish">
-                  Hoàn Thành
-                </option>
-                <option
-                  value="Kỹ Thuật-Bảo Trì"
-                  data-i18n="department_maintenance"
-                >
-                  Kỹ Thuật-Bảo Trì
-                </option>
-                <option value="IE" data-i18n="department_ie">IE</option>
-                <option value="QC" data-i18n="department_qc">QC</option>
-                <option value="Kho Vải" data-i18n="department_fabric_wh">
-                  Kho Vải
-                </option>
-                <option value="Kho Phụ Liệu" data-i18n="department_material_wh">
-                  Kho Phụ Liệu
-                </option>
-                <option
-                  value="Kho Thành Phẩm"
-                  data-i18n="department_product_wh"
-                >
-                  Kho Thành Phẩm
-                </option>
-                <option value="Hành Chính" data-i18n="department_admin">
-                  Hành Chính
-                </option>
-                <option
-                  value="Văn Phòng Sản Xuất"
-                  data-i18n="department_production_office"
-                >
-                  Văn Phòng Sản Xuất
-                </option>
-                <option
-                  value="Văn Phòng Kho"
-                  data-i18n="department_warehouse_office"
-                >
-                  Văn Phòng Kho
-                </option>
-                <option value="Theo đơn" data-i18n="department_order">
-                  Theo đơn
-                </option>
-                <option value="Khác" data-i18n="department_other">Khác</option>
-              </select>
-            </div>
-            <div class="form-row">
-              <label for="userDevice" data-i18n="deviceInUseOptional"
-                >Thiết bị sử dụng (nếu có)</label
-              >
-              <select id="userDevice">
-                <option value="" data-i18n="noUser">Không có</option>
-                <!-- Available devices will be loaded here -->
-              </select>
-            </div>
-            <div class="form-row">
-              <label for="assignDate" data-i18n="issueDateOptional"
-                >Ngày cấp (nếu có)</label
-              >
-              <input type="date" id="assignDate" placeholder="YYYY-MM-DD" />
-            </div>
-          </form>
-        </div>
-        <div class="modal-footer">
-          <button class="btn btn-danger" id="cancelUserBtn" data-i18n="cancel">
-            Hủy
-          </button>
-          <button class="btn btn-success" id="saveUserBtn" data-i18n="save">
-            Lưu
-          </button>
-        </div>
+  <!-- User Modal -->
+  <div class="modal" id="userModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 class="modal-title" id="userModalTitle">Thêm người dùng mới</h3>
+        <button class="modal-close" id="closeUserModal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <form id="userForm">
+          <input type="hidden" id="userId" />
+          <div class="form-row">
+            <label for="userCode" data-i18n="employeeId">Mã nhân viên</label>
+            <input type="text" id="userCode" required />
+          </div>
+          <div class="form-row">
+            <label for="userName" data-i18n="fullName">Họ và tên</label>
+            <input type="text" id="userName" required />
+          </div>
+          <div class="form-row">
+            <label for="userDepartment" data-i18n="department">Phòng ban</label>
+            <select id="userDepartment" required>
+              <option value="" data-i18n="selectDepartment">
+                Chọn phòng ban
+              </option>
+              <option value="Tổ Cắt" data-i18n="department_cut">
+                Tổ Cắt
+              </option>
+              <option value="Phòng Mẫu" data-i18n="department_sample">
+                Phòng Mẫu
+              </option>
+              <option value="Chuyền May" data-i18n="department_sewing">
+                Chuyền May
+              </option>
+              <option value="Hoàn Thành" data-i18n="department_finish">
+                Hoàn Thành
+              </option>
+              <option value="Kỹ Thuật-Bảo Trì" data-i18n="department_maintenance">
+                Kỹ Thuật-Bảo Trì
+              </option>
+              <option value="IE" data-i18n="department_ie">IE</option>
+              <option value="QC" data-i18n="department_qc">QC</option>
+              <option value="Kho Vải" data-i18n="department_fabric_wh">
+                Kho Vải
+              </option>
+              <option value="Kho Phụ Liệu" data-i18n="department_material_wh">
+                Kho Phụ Liệu
+              </option>
+              <option value="Kho Thành Phẩm" data-i18n="department_product_wh">
+                Kho Thành Phẩm
+              </option>
+              <option value="Hành Chính" data-i18n="department_admin">
+                Hành Chính
+              </option>
+              <option value="Văn Phòng Sản Xuất" data-i18n="department_production_office">
+                Văn Phòng Sản Xuất
+              </option>
+              <option value="Văn Phòng Kho" data-i18n="department_warehouse_office">
+                Văn Phòng Kho
+              </option>
+              <option value="Theo đơn" data-i18n="department_order">
+                Theo đơn
+              </option>
+              <option value="Khác" data-i18n="department_other">Khác</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <label for="userDevice" data-i18n="deviceInUseOptional">Tài sản sử dụng (nếu có)</label>
+            <select id="userDevice">
+              <option value="" data-i18n="noUser">Không có</option>
+              <!-- Available devices will be loaded here -->
+            </select>
+          </div>
+          <div class="form-row">
+            <label for="assignDate" data-i18n="issueDateOptional">Ngày cấp (nếu có)</label>
+            <input type="date" id="assignDate" placeholder="YYYY-MM-DD" />
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-danger" id="cancelUserBtn" data-i18n="cancel">
+          Hủy
+        </button>
+        <button class="btn btn-success" id="saveUserBtn" data-i18n="save">
+          Lưu
+        </button>
       </div>
     </div>
+  </div>
 
-    <!-- Delete Confirmation Modal -->
-    <div class="modal" id="deleteModal">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h3 class="modal-title" id="deleteModalTitle">Xác nhận xóa</h3>
-          <button class="modal-close" id="closeDeleteModal">&times;</button>
-        </div>
-        <div class="modal-body">
-          <p id="deleteMessage">Bạn có chắc chắn muốn xóa mục này?</p>
-        </div>
-        <div class="modal-footer">
-          <button class="btn btn-danger" id="cancelDeleteBtn">Hủy</button>
-          <button class="btn btn-success" id="confirmDeleteBtn">
-            Xác nhận
-          </button>
-        </div>
+  <!-- Delete Confirmation Modal -->
+  <div class="modal" id="deleteModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 class="modal-title" id="deleteModalTitle">Xác nhận xóa</h3>
+        <button class="modal-close" id="closeDeleteModal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p id="deleteMessage">Bạn có chắc chắn muốn xóa mục này?</p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-danger" id="cancelDeleteBtn">Hủy</button>
+        <button class="btn btn-success" id="confirmDeleteBtn">
+          Xác nhận
+        </button>
       </div>
     </div>
+  </div>
 
-    <!-- Image Modal -->
-    <div class="modal" id="imageModal">
-      <div class="modal-content" style="max-width: 80%; max-height: 80%">
-        <div class="modal-header">
-          <h3 class="modal-title" data-i18n="deviceImage">Ảnh thiết bị</h3>
-          <button class="modal-close" id="closeImageModal">&times;</button>
-        </div>
-        <div class="modal-body" style="padding: 0">
-          <img
-            id="modalImage"
-            src=""
-            alt="Ảnh thiết bị"
-            style="width: 100%; height: auto"
-          />
-        </div>
+  <!-- Image Modal -->
+  <div class="modal" id="imageModal">
+    <div class="modal-content" style="max-width: 80%; max-height: 80%">
+      <div class="modal-header">
+        <h3 class="modal-title" data-i18n="deviceImage">Ảnh thiết bị</h3>
+        <button class="modal-close" id="closeImageModal">&times;</button>
+      </div>
+      <div class="modal-body" style="padding: 0">
+        <img id="modalImage" src="" alt="Ảnh thiết bị" style="width: 100%; height: auto" />
       </div>
     </div>
+  </div>
 
-    <!-- Purchase Modal -->
-    <div class="modal" id="purchaseModal">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h3
-            class="modal-title"
-            id="purchaseModalTitle"
-            data-i18n="addPurchaseModalTitle"
-          >
-            Thêm thông tin mua hàng
-          </h3>
-          <button class="modal-close" id="closePurchaseModal">&times;</button>
-        </div>
-        <div class="modal-body">
-          <form id="purchaseForm">
-            <input type="hidden" id="purchaseId" />
-            <div class="form-row">
-              <label for="purchaseDevice" data-i18n="deviceCode"
-                >Mã thiết bị</label
-              >
-              <select id="purchaseDevice" required>
-                <!-- Devices will be loaded here -->
-              </select>
-            </div>
-            <div class="form-row">
-              <label for="purchaseDate" data-i18n="importDate">Ngày nhập</label>
-              <input type="date" id="purchaseDate" required />
-            </div>
-            <div class="form-row">
-              <label for="purchasePrice" data-i18n="purchasePrice"
-                >Thành tiền (VND)</label
-              >
-              <input type="number" id="purchasePrice" placeholder="0" />
-            </div>
-            <div class="form-row">
-              <label for="purchaseSource" data-i18n="purchaseSource"
-                >Nguồn mua</label
-              >
-              <input type="text" id="purchaseSource" placeholder="VN, CN,..." />
-            </div>
-          </form>
-        </div>
-        <div class="modal-footer">
-          <button
-            class="btn btn-danger"
-            id="cancelPurchaseBtn"
-            data-i18n="cancel"
-          >
-            Hủy
-          </button>
-          <button class="btn btn-success" id="savePurchaseBtn" data-i18n="save">
-            Lưu
-          </button>
-        </div>
+  <!-- Purchase Modal -->
+  <div class="modal" id="purchaseModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 class="modal-title" id="purchaseModalTitle" data-i18n="addPurchaseModalTitle">
+          Thêm thông tin mua hàng
+        </h3>
+        <button class="modal-close" id="closePurchaseModal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <form id="purchaseForm">
+          <input type="hidden" id="purchaseId" />
+          <div class="form-row">
+            <label for="purchaseDevice" data-i18n="deviceCode">Mã tài sản</label>
+            <select id="purchaseDevice" required>
+              <!-- Devices will be loaded here -->
+            </select>
+          </div>
+          <div class="form-row">
+            <label for="purchaseDate" data-i18n="importDate">Ngày nhập</label>
+            <input type="date" id="purchaseDate" required />
+          </div>
+          <div class="form-row">
+            <label for="purchasePrice" data-i18n="purchasePrice">Thành tiền (VND)</label>
+            <input type="number" id="purchasePrice" placeholder="0" />
+          </div>
+          <div class="form-row">
+            <label for="purchaseSource" data-i18n="purchaseSource">Nguồn mua</label>
+            <input type="text" id="purchaseSource" placeholder="VN, CN,..." />
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-danger" id="cancelPurchaseBtn" data-i18n="cancel">
+          Hủy
+        </button>
+        <button class="btn btn-success" id="savePurchaseBtn" data-i18n="save">
+          Lưu
+        </button>
       </div>
     </div>
+  </div>
 
-    <!-- Account Modal (Đã đưa ra ngoài Purchase Modal) -->
-    <div class="modal" id="accountModal">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h3 class="modal-title" data-i18n="addAccountModalTitle">
-            Thêm tài khoản mới
-          </h3>
-          <button class="modal-close" onclick="closeAccountModal()">
-            &times;
-          </button>
-        </div>
-        <div class="modal-body">
-          <form id="accountForm">
-            <div class="form-row">
-              <label data-i18n="acc_username">Tên đăng nhập</label>
-              <input
-                type="text"
-                id="accUsername"
-                required
-                placeholder="VD: ketoan1"
-              />
-            </div>
-            <div class="form-row">
-              <label data-i18n="acc_password">Mật khẩu</label>
-              <input
-                type="password"
-                id="accPassword"
-                required
-                placeholder="******"
-              />
-            </div>
-            <div class="form-row">
-              <label data-i18n="acc_displayName">Tên hiển thị</label>
-              <input
-                type="text"
-                id="accDisplayName"
-                placeholder="Nguyễn Văn A"
-              />
-            </div>
-            <div class="form-row">
-              <label data-i18n="acc_role">Quyền hạn</label>
-              <select id="accRole">
-                <option value="user" data-i18n="acc_role_user">
-                  User (Nhân viên)
-                </option>
-                <option value="admin" data-i18n="acc_role_admin">
-                  Admin (Quản trị)
-                </option>
-              </select>
-            </div>
-            <div class="modal-footer" style="padding: 0; border: none">
-              <button
-                type="submit"
-                class="btn btn-success"
-                style="width: 100%"
-                data-i18n="createAccountBtn"
-              >
-                Tạo tài khoản
-              </button>
-            </div>
-          </form>
-        </div>
+  <!-- Account Modal (Đã đưa ra ngoài Purchase Modal) -->
+  <div class="modal" id="accountModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 class="modal-title" data-i18n="addAccountModalTitle">
+          Thêm tài khoản mới
+        </h3>
+        <button class="modal-close" onclick="closeAccountModal()">
+          &times;
+        </button>
+      </div>
+      <div class="modal-body">
+        <form id="accountForm">
+          <div class="form-row">
+            <label data-i18n="acc_username">Tên đăng nhập</label>
+            <input type="text" id="accUsername" required placeholder="VD: ketoan1" />
+          </div>
+          <div class="form-row">
+            <label data-i18n="acc_password">Mật khẩu</label>
+            <input type="password" id="accPassword" required placeholder="******" />
+          </div>
+          <div class="form-row">
+            <label data-i18n="acc_displayName">Tên hiển thị</label>
+            <input type="text" id="accDisplayName" placeholder="Nguyễn Văn A" />
+          </div>
+          <div class="form-row">
+            <label data-i18n="acc_role">Quyền hạn</label>
+            <select id="accRole">
+              <option value="user" data-i18n="acc_role_user">
+                User (Nhân viên)
+              </option>
+              <option value="admin" data-i18n="acc_role_admin">
+                Admin (Quản trị)
+              </option>
+            </select>
+          </div>
+          <div class="modal-footer" style="padding: 0; border: none">
+            <button type="submit" class="btn btn-success" style="width: 100%" data-i18n="createAccountBtn">
+              Tạo tài khoản
+            </button>
+          </div>
+        </form>
       </div>
     </div>
+  </div>
 
-    <!-- Scripts -->
-    <script src="./translations.js"></script>
-    <script src="./script.js"></script>
-  </body>
+  <div class="modal" id="roleModal">
+    <div class="modal-content" style="max-width: 400px">
+      <div class="modal-header">
+        <h3 class="modal-title">Phân chia lại quyền hạn</h3>
+        <button class="modal-close" onclick="closeRoleModal()">
+          &times;
+        </button>
+      </div>
+      <div class="modal-body">
+        <form id="roleForm">
+          <input type="hidden" id="editRoleUsername" />
+          <div class="form-row">
+            <label>Tài khoản đang chọn:</label>
+            <input type="text" id="editRoleDisplay" disabled style="
+                  background: #f1f5f9;
+                  color: #475569;
+                  font-weight: bold;
+                  cursor: not-allowed;
+                " />
+          </div>
+          <div class="form-row">
+            <label>Cấp quyền mới</label>
+            <select id="newRoleSelect">
+              <option value="user">User (Nhân viên)</option>
+              <option value="admin">Admin (Quản trị)</option>
+            </select>
+          </div>
+          <div class="modal-footer" style="padding: 0; border: none; margin-top: 15px">
+            <button type="submit" class="btn btn-warning" style="width: 100%; color: white">
+              <i class="fas fa-save"></i> Lưu quyền mới
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+  <!-- Scripts -->
+  <script src="./translations.js"></script>
+  <script src="./script.js?v=4"></script>
+</body>
+
 </html>

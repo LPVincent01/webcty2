@@ -450,8 +450,8 @@ table td {
 }
 
 /* Đặt min-width cho các cột để tránh bị co lại quá mức */
-/* Cột Tên thiết bị và Người sử dụng cần rộng hơn */
-#devicesTable th:nth-child(2), /* Tên thiết bị */
+/* Cột Tên tài sản và Người sử dụng cần rộng hơn */
+#devicesTable th:nth-child(2), /* Tên tài sản */
 #devicesTable td:nth-child(2) {
   min-width: 200px;
 }
@@ -637,6 +637,17 @@ th.sorted-desc::after {
 }
 .btn-danger:hover {
   background: var(--danger-hover);
+}
+
+/* --- Nút Cảnh báo / Phân quyền (Màu Cam) --- */
+.btn-warning {
+  background-color: #f59e0b; /* Màu cam tự nhiên */
+  color: white !important;
+  border: none;
+}
+
+.btn-warning:hover {
+  background-color: #d97706; /* Cam đậm hơn một chút khi di chuột vào */
 }
 
 /* ========================

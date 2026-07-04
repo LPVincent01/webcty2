@@ -1,0 +1,29 @@
+{
+  "name": "webcty2",
+  "version": "1.0.0",
+  "main": "script.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/LPVincent01/webcty2.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/LPVincent01/webcty2/issues"
+  },
+  "homepage": "https://github.com/LPVincent01/webcty2#readme",
+  "description": "",
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "body-parser": "^2.2.0",
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
+    "msnodesqlv8": "^5.1.1",
+    "mssql": "^11.0.1",
+    "multer": "^2.0.2",
+    "qrcode": "^1.5.4"
+  }
+}

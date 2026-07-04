@@ -1,16 +1,21 @@
-﻿﻿/***********************
+/***********************
  * CẤU HÌNH API
  ***********************/
 const API_BASE = window.location.origin;
 const api = (url) => (url.startsWith("http") ? url : `${API_BASE}${url}`);
 // ==== ĐƯỜNG LINK DÙNG CHO QR & EXCEL (THÊM MỚI) ====
-//const PUBLIC_WEB_BASE = API_BASE;
-// Nếu sau này muốn cố định IP / domain public thì đổi thành:
-// const PUBLIC_WEB_BASE = "http://115.79.138.139:3000";
-const PUBLIC_WEB_BASE = "http://192.168.11.205:3000";
+// Dùng window.location.origin để tự động lấy IP hiện tại của người dùng (dù là 205 hay 207)
+const PUBLIC_WEB_BASE = window.location.origin;
 
-function buildDeviceDisplayUrl(maThietBi) {
-  return `${PUBLIC_WEB_BASE}/display.html?id=${encodeURIComponent(maThietBi)}`;
+// Nếu muốn dùng domain hoặc IP WAN thay vì LAN, hãy đổi thành:
+// const PUBLIC_WEB_BASE = "http://115.79.138.139:3000";
+
+// ⚠️ MỢI CỬ: Nếu API_BASE khác PUBLIC_WEB_BASE sẽ dẫn đến CORS issue
+// Vậy nên API_BASE vẫn dùng window.location.origin (flexible cho development)
+// nhưng PUBLIC_WEB_BASE cố định cho QR code
+
+function buildDeviceDisplayUrl(maTaiSan) {
+  return `${PUBLIC_WEB_BASE}/display.html?id=${encodeURIComponent(maTaiSan)}`;
 }
 // ==== HẾT PHẦN THÊM MỚI ====
 
@@ -72,7 +77,7 @@ function handleUnauthorized() {
   try {
     appContainer.style.display = "none";
     loginPage.style.display = "flex";
-  } catch (_) {}
+  } catch (_) { }
   showAlert(t("alert_unauthorized"), false);
 }
 
@@ -153,28 +158,63 @@ importDevicesExcelInput.addEventListener("change", async (event) => {
     const sheetName = workbook.SheetNames[0];
     const sheet = workbook.Sheets[sheetName];
     const raw = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+    // Lấy thêm bản parse hiển thị chuỗi format (để giữ số 0 ở đầu cho SerialSN)
+    const rawFmt = XLSX.utils.sheet_to_json(sheet, { defval: "", raw: false });
 
     // TỐI ƯU: Tạo map tra cứu loại thiết bị 1 lần duy nhất (O(1) lookup)
     const deviceTypeLookup = new Map();
     for (const cat in deviceTypes) {
       for (const v of Object.values(deviceTypes[cat] || {})) {
-        const normV = normalizeLoaiThietBi(v);
+        const normV = normalizeLoaiTaiSan(v);
         if (normV) {
-          deviceTypeLookup.set(normalizeLoaiThietBiCompact(normV), v);
+          deviceTypeLookup.set(normalizeLoaiTaiSanCompact(normV), v);
         }
       }
     }
 
-    const json = raw.map((row) => {
+    const json = raw.map((row, idx) => {
+      // FIX: Bắt nhiều tên cột khác nhau cho Tên Thiết Bị (MODEL)
+      const rawName =
+        row.TenTaiSan ??
+        row["Tên tài sản"] ??
+        row.TenThietBi ??
+        row["Tên thiết bị"] ??
+        row.MODEL ??
+        row.Model ??
+        row.model ??
+        "";
+
+      const keys = Object.keys(row);
+      const idKey = keys.find(k => {
+        const norm = String(k).toLowerCase().replace(/\s+/g, '');
+        return norm.includes('mataisan') || 
+               norm.includes('mathietbi') || 
+               norm.includes('mãtàisản') || 
+               norm.includes('mãthiếtbị') ||
+               norm.includes('matalsan') ||
+               norm.includes('mataisa');
+      }) || keys[0]; // Lấy cột đầu tiên nếu không tìm thấy tên phù hợp
+
+      const rawId = row[idKey] ?? "";
+
       const parsed = {
         ...row,
-        Vitri: row.Vitri || "", // 👈 THÊM DÒNG NÀY
+        MaTaiSan: String(rawId).trim(),
+        Vitri: row.Vitri || "",
         MaNV: row.MaNV ? String(row.MaNV) : "",
         Thietbisudung: "",
         Trangthai: row.Trangthai || "",
+        TenTaiSan: rawName, // Ép giá trị đã tìm được vào đây
       };
       /* ===== BẮT ĐẦU FIX SERIALSN (EXCEL NUMBER -> STRING) ===== */
-      const rawSN = row.SerialSN ?? row["Serial(S/N)"] ?? row["Serial(SN)"]; // hỗ trợ nhiều header
+      const rowFmt = rawFmt[idx] || {}; // Lấy hàng tương ứng nhưng đã format chuỗi
+      
+      const snKey = keys.find(k => {
+        const norm = String(k).toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9]/gi, '');
+        return norm.includes('serial') || norm.includes('sn');
+      });
+      const rawSN = snKey ? rowFmt[snKey] : null;
+
       if (rawSN === null || rawSN === undefined) {
         parsed.SerialSN = "";
       } else {
@@ -229,31 +269,31 @@ importDevicesExcelInput.addEventListener("change", async (event) => {
       parsed.NgayNhap = toISODate(rawNgayNhap);
       /* ===== KẾT THÚC FIX NgayNhap ===== */
 
-      /* ===== BẮT ĐẦU FIX LoaiThietBi (xoá xuống dòng + map về value chuẩn) ===== */
+      /* ===== BẮT ĐẦU FIX LoaiTaiSan (xoá xuống dòng + map về value chuẩn) ===== */
       const rawType =
-        row.LoaiThietBi ??
-        row["Loại thiết bị"] ??
+        row.LoaiTaiSan ??
+        row["Loại tài sản"] ??
         row["Loai thiet bi"] ??
         row["DeviceType"] ??
         "";
 
-      const typeNorm = normalizeLoaiThietBi(rawType);
+      const typeNorm = normalizeLoaiTaiSan(rawType);
 
       // Map về đúng value đang có trong deviceTypes để edit tự tick chuẩn
       let mappedType = "";
       if (typeNorm) {
-        const compactNeedle = normalizeLoaiThietBiCompact(typeNorm);
+        const compactNeedle = normalizeLoaiTaiSanCompact(typeNorm);
         // Tra cứu nhanh từ Map đã tạo
         if (deviceTypeLookup.has(compactNeedle)) {
           mappedType = deviceTypeLookup.get(compactNeedle);
         }
       }
 
-      parsed.LoaiThietBi = mappedType || typeNorm;
-      /* ===== KẾT THÚC FIX LoaiThietBi ===== */
+      parsed.LoaiTaiSan = mappedType || typeNorm;
+      /* ===== KẾT THÚC FIX LoaiTaiSan ===== */
 
       return parsed;
-    });
+    }).filter(item => item && item.MaTaiSan !== "");
 
     if (json.length === 0)
       return showAlert("Không có dữ liệu trong file", false);
@@ -296,7 +336,7 @@ importUsersExcelInput.addEventListener("change", async (event) => {
       const parsed = {
         ...row,
         MaNV: row.MaNV ? String(row.MaNV) : "",
-        Thietbisudung: "", // Bỏ trống theo yêu cầu
+        Thietbisudung: row.Thietbisudung ? String(row.Thietbisudung).trim() : "",
         Trangthai: row.Trangthai || "", // hoặc để trống, backend sẽ default "Chưa cấp"
       };
 
@@ -332,18 +372,107 @@ importUsersExcelInput.addEventListener("change", async (event) => {
 
     console.table(json); // Preview console
 
-    const confirmImport = confirm(
-      `Bạn có chắc muốn nhập ${json.length} người sử dụng?`,
-    );
+    const confirmImport = confirm(`Bạn có chắc muốn nhập ${json.length} người sử dụng?`);
     if (confirmImport) {
       const res = await fetchJson("/api/users/import", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(json),
       });
+      
       if (res) {
-        showAlert("Nhập người sử dụng thành công ✔️");
-        loadUsers();
+        if (res.requiresConfirmation) {
+          // Hiển thị Modal tùy chỉnh để xác nhận bỏ qua lỗi
+          const overlay = document.createElement("div");
+          overlay.className = "modal";
+          overlay.style.display = "flex";
+          overlay.style.alignItems = "center";
+          overlay.style.justifyContent = "center";
+          overlay.style.position = "fixed";
+          overlay.style.top = "0";
+          overlay.style.left = "0";
+          overlay.style.width = "100%";
+          overlay.style.height = "100%";
+          overlay.style.backgroundColor = "rgba(0,0,0,0.5)";
+          overlay.style.zIndex = "9999";
+
+          const modalBox = document.createElement("div");
+          modalBox.style.backgroundColor = "var(--bg-color, #fff)";
+          modalBox.style.padding = "20px";
+          modalBox.style.borderRadius = "8px";
+          modalBox.style.maxWidth = "500px";
+          modalBox.style.width = "90%";
+          modalBox.style.boxShadow = "0 4px 6px rgba(0,0,0,0.1)";
+
+          const title = document.createElement("h3");
+          title.textContent = `Phát hiện ${res.errors.length} dòng dữ liệu lỗi/trùng lặp`;
+          title.style.marginTop = "0";
+          title.style.color = "var(--danger-color, #dc3545)";
+
+          const errorList = document.createElement("div");
+          errorList.style.maxHeight = "200px";
+          errorList.style.overflowY = "auto";
+          errorList.style.backgroundColor = "var(--bg-color, #f8f9fa)";
+          errorList.style.padding = "10px";
+          errorList.style.border = "1px solid var(--border-color, #ddd)";
+          errorList.style.marginBottom = "20px";
+          errorList.style.fontSize = "14px";
+          errorList.style.color = "var(--text-color, #333)";
+          
+          res.errors.forEach(err => {
+            const p = document.createElement("div");
+            p.textContent = err;
+            p.style.marginBottom = "5px";
+            errorList.appendChild(p);
+          });
+
+          const msg = document.createElement("p");
+          msg.textContent = "Bạn có muốn BỎ QUA các dòng lỗi này và TIẾP TỤC nhập các dòng hợp lệ còn lại không?";
+          msg.style.fontWeight = "bold";
+
+          const btnContainer = document.createElement("div");
+          btnContainer.style.display = "flex";
+          btnContainer.style.justifyContent = "flex-end";
+          btnContainer.style.gap = "10px";
+
+          const cancelBtn = document.createElement("button");
+          cancelBtn.textContent = "Hủy bỏ";
+          cancelBtn.className = "btn-secondary";
+          cancelBtn.onclick = () => {
+            document.body.removeChild(overlay);
+          };
+
+          const confirmBtn = document.createElement("button");
+          confirmBtn.textContent = "Bỏ qua lỗi & Tiếp tục";
+          confirmBtn.className = "btn-primary";
+          confirmBtn.style.backgroundColor = "var(--danger-color, #dc3545)";
+          confirmBtn.onclick = async () => {
+            document.body.removeChild(overlay);
+            // Gửi lại request với skipErrors=true
+            const res2 = await fetchJson("/api/users/import?skipErrors=true", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(json),
+            });
+            if (res2) {
+              showAlert(res2.message || "Nhập người sử dụng thành công ✔️", true);
+              loadUsers();
+            }
+          };
+
+          btnContainer.appendChild(cancelBtn);
+          btnContainer.appendChild(confirmBtn);
+          modalBox.appendChild(title);
+          modalBox.appendChild(errorList);
+          modalBox.appendChild(msg);
+          modalBox.appendChild(btnContainer);
+          overlay.appendChild(modalBox);
+          document.body.appendChild(overlay);
+
+        } else {
+          showAlert(res.message || "Nhập người sử dụng thành công ✔️", true);
+          loadUsers();
+        }
       }
     }
   };
@@ -410,11 +539,11 @@ const overviewChartYear1El = document.getElementById("overviewChartYear1");
 const overviewChartYear2El = document.getElementById("overviewChartYear2");
 
 // Charts ctx
+const monthlyChartYearSelector = document.getElementById(
+  "monthlyChartYearSelector",
+);
 const monthlyChartCtx = document
   .getElementById("monthlyChart")
-  ?.getContext("2d");
-const monthlyChart2026Ctx = document
-  .getElementById("monthlyChart2026")
   ?.getContext("2d");
 const yearlyChartCtx = document.getElementById("yearlyChart")?.getContext("2d");
 
@@ -434,16 +563,16 @@ let deleteType = null;
 let deleteId = null;
 window.authToken = null;
 
-let deviceSort = { key: "MaThietBi", order: "asc" };
+let deviceSort = { key: "MaTaiSan", order: "asc" };
 let userSort = { key: "MaNV", order: "asc" };
-let purchasesSort = { key: "MaThietBi", order: "asc" }; // 👈 thêm dòng này
+let purchasesSort = { key: "MaTaiSan", order: "asc" }; // 👈 thêm dòng này
 window.currentRole = null;
 window.currentUsername = null;
 let currentTabStatus = ""; //
 let currentUserTabStatus = ""; // [MỚI] Cho người dùng Biến lưu trạng thái Tab hiện tại (Rỗng = Tất cả)
 let userCurrentPage = 1;
 const ROWS_PER_PAGE = 10;
-// Bộ lọc tháng cho Danh sách thiết bị (lọc theo Ngày nhập)
+// Bộ lọc tháng cho Danh sách tài sản (lọc theo Ngày nhập)
 let deviceDateFilter = null; // { year: 2025, month: 11 } hoặc null = không lọc
 let currentLang = localStorage.getItem("lang") || "vi";
 
@@ -461,12 +590,15 @@ async function loadDevices() {
   devices = data
     .map((d) => ({
       ...d,
-      LoaiThietBi: normalizeLoaiThietBi(d.LoaiThietBi),
+      LoaiTaiSan: normalizeLoaiTaiSan(d.LoaiTaiSan),
     }))
-    .sort((a, b) => a.MaThietBi.localeCompare(b.MaThietBi));
+    .sort((a, b) => a.MaTaiSan.localeCompare(b.MaTaiSan));
 
-  // [QUAN TRỌNG] Tính toán số lượng cho các Tabs trạng thái ngay khi tải xong
-  updateDeviceStatusCounts();
+  // [MỚI] Khôi phục filter từ URL trước khi render lần đầu tiên
+  if (!window.hasRestoredUrlParams) {
+    restoreUrlParams();
+    window.hasRestoredUrlParams = true;
+  }
 
   // Hiển thị dữ liệu ra bảng
   applyFiltersAndRender();
@@ -476,7 +608,6 @@ async function loadUsers() {
   if (!data) return;
   users = data.sort((a, b) => a.MaNV.localeCompare(b.MaNV));
 
-  updateUserStats(); // [MỚI] Cập nhật số lượng trên Tab Users
   applyUserFiltersAndRender(); // [MỚI] Gọi hàm render thông minh
 }
 
@@ -545,9 +676,9 @@ async function populateDeviceDropdownForPurchase() {
   const allDevices = await fetchJson("/api/devices");
   const allPurchases = await fetchJson("/api/purchases");
 
-  const purchasedDeviceIds = new Set(allPurchases.map((p) => p.MaThietBi));
+  const purchasedDeviceIds = new Set(allPurchases.map((p) => p.MaTaiSan));
   const availableDevices = allDevices.filter(
-    (d) => !purchasedDeviceIds.has(d.MaThietBi),
+    (d) => !purchasedDeviceIds.has(d.MaTaiSan),
   );
 
   const select = document.getElementById("purchaseDevice");
@@ -556,8 +687,8 @@ async function populateDeviceDropdownForPurchase() {
 
   availableDevices.forEach((d) => {
     const option = document.createElement("option");
-    option.value = d.MaThietBi;
-    option.textContent = `${d.MaThietBi} - ${d.TenThietBi}`;
+    option.value = d.MaTaiSan;
+    option.textContent = `${d.MaTaiSan} - ${d.TenTaiSan}`;
     select.appendChild(option);
   });
 
@@ -582,19 +713,20 @@ function renderDevicesTable(dataToRender) {
 
   // Sử dụng map để tạo chuỗi HTML nhanh hơn
   const htmlRows = dataToRender
-    .map((d) => {
+    .map((d, index) => {
+      const stt = (deviceCurrentPage - 1) * ROWS_PER_PAGE + index + 1;
       const actions =
         window.currentRole === "admin"
           ? `<div class="action-btns">
-             <button class="btn btn-primary btn-sm" onclick="editDevice('${d.MaThietBi}')"><i class="fas fa-edit"></i></button>
-             <button class="btn btn-danger btn-sm" onclick="confirmDelete('device','${d.MaThietBi}')"><i class="fas fa-trash"></i></button>
+             <button class="btn btn-primary btn-sm" onclick="editDevice('${d.MaTaiSan}')"><i class="fas fa-edit"></i></button>
+             <button class="btn btn-danger btn-sm" onclick="confirmDelete('device','${d.MaTaiSan}')"><i class="fas fa-trash"></i></button>
            </div>`
           : `<div class="action-btns">
-             <button class="btn btn-primary btn-sm" onclick="editDevice('${d.MaThietBi}')"><i class="fas fa-edit"></i></button>
+             <button class="btn btn-primary btn-sm" onclick="editDevice('${d.MaTaiSan}')"><i class="fas fa-edit"></i></button>
            </div>`;
 
-      // Ưu tiên hiển thị TenThietBi, nếu không có thì lấy Model
-      const name = d.TenThietBi || d.Model || "";
+      // Ưu tiên hiển thị TenTaiSan, nếu không có thì lấy Model
+      const name = d.TenTaiSan || d.Model || "";
 
       // [BẮT ĐẦU SỬA] -----------------------------------------------------------
       // [CODE MỚI] Ưu tiên lấy cột HinhAnhHienThi, nếu không có thì lấy HinhAnhThucTe
@@ -607,17 +739,18 @@ function renderDevicesTable(dataToRender) {
       }
 
       const imageHtml = cleanPath
-        ? `<a href="#" onclick="openImageModal('${encodeURI(cleanPath)}')" title="Xem ảnh">
-       <img src="${encodeURI(cleanPath)}" class="table-thumbnail" alt="thumbnail" loading="lazy">
+        ? `<a href="javascript:void(0)" onclick="openImageModal('${encodeURI(cleanPath)}')" title="Xem ảnh">
+       <img src="${encodeURI(cleanPath)}" class="table-thumbnail" alt="thumbnail" loading="lazy" onerror="this.style.display='none'; this.parentElement.removeAttribute('onclick'); this.parentElement.style.cursor='default';">
      </a>`
         : "";
       // [KẾT THÚC SỬA] ----------------------------------------------------------
 
       return `
       <tr>
-        <td>${d.MaThietBi}</td>
+        <td>${stt}</td>
+        <td>${d.MaTaiSan}</td>
         <td>${name}</td>
-        <td>${d.LoaiThietBi || ""}</td>
+        <td>${d.LoaiTaiSan || ""}</td>
         <td>${d.SerialSN || "-"}</td>
         <td>${formatDate(d.NgayNhap)}</td>
         <td><span class="status-badge ${getStatusClass(d.Trangthai)}">${getTranslatedStatus(d.Trangthai)}</span></td>
@@ -653,17 +786,23 @@ window.addEventListener("click", (e) => {
 });
 function renderUsersTable(filteredUsers) {
   const dataToRender = filteredUsers || users;
-  usersTableBody.innerHTML = "";
-  dataToRender.forEach((u) => {
-    const badgeClass = getStatusClass(u.Trangthai) || "status-available";
-    const actions =
-      window.currentRole === "admin"
-        ? /*html*/ `<div class="action-btns">
+  if (!dataToRender || dataToRender.length === 0) {
+    usersTableBody.innerHTML =
+      '<tr><td colspan="7" style="text-align:center; padding: 20px;">Không có dữ liệu</td></tr>';
+    return;
+  }
+
+  const htmlRows = dataToRender
+    .map((u) => {
+      const badgeClass = getStatusClass(u.Trangthai) || "status-available";
+      const actions =
+        window.currentRole === "admin"
+          ? /*html*/ `<div class="action-btns">
              <button class="btn btn-primary btn-sm" onclick="editUser('${u.MaNV}')"><i class="fas fa-edit"></i></button>
              <button class="btn btn-danger btn-sm" onclick="confirmDelete('user','${u.MaNV}')"><i class="fas fa-trash"></i></button>
            </div>`
-        : ``;
-    usersTableBody.innerHTML += `
+          : ``;
+      return `
       <tr>
         <td>${u.MaNV}</td>
         <td>${u.HoVaTen}</td>
@@ -671,11 +810,14 @@ function renderUsersTable(filteredUsers) {
         <td>${u.Thietbisudung || "-"}</td>
         <td>${u.Ngaycap ? formatDate(u.Ngaycap) : "-"}</td>
         <td><span class="status-badge ${badgeClass}">${getTranslatedStatus(
-          u.Trangthai || "Chưa cấp",
-        )}</span></td>
+        u.Trangthai || "Chưa cấp",
+      )}</span></td>
         <td>${actions}</td>
       </tr>`;
-  });
+    })
+    .join("");
+
+  usersTableBody.innerHTML = htmlRows;
 }
 function editPurchase(id) {
   const p = purchases.find((x) => x.PurchaseId === id);
@@ -688,8 +830,8 @@ function editPurchase(id) {
 
   // 👉 Chỉ thêm thiết bị hiện tại vào dropdown
   const opt = document.createElement("option");
-  opt.value = p.MaThietBi;
-  opt.textContent = `${p.MaThietBi} - ${p.TenThietBi || ""}`;
+  opt.value = p.MaTaiSan;
+  opt.textContent = `${p.MaTaiSan} - ${p.TenTaiSan || ""}`;
   select.appendChild(opt);
   select.disabled = true; // ❌ Không cho chọn thiết bị khác
 
@@ -704,35 +846,40 @@ function editPurchase(id) {
 
 function renderPurchasesTable(dataToRender) {
   if (!purchasesTableBody) return;
-  purchasesTableBody.innerHTML = "";
+  if (!dataToRender || dataToRender.length === 0) {
+    purchasesTableBody.innerHTML =
+      '<tr><td colspan="7" style="text-align:center; padding: 20px;">Không có dữ liệu</td></tr>';
+    return;
+  }
 
-  dataToRender.forEach((p) => {
-    const amount = formatCurrencyVND(p.ThanhTien);
+  const htmlRows = dataToRender
+    .map((p) => {
+      const amount = formatCurrencyVND(p.ThanhTien);
 
-    const srcRaw = (p.NguonMua || "").toString().trim().toUpperCase();
-    let srcClass = "purchase-source-other";
-    let srcLabel = srcRaw || "-";
-    if (srcRaw === "VN") {
-      srcClass = "purchase-source-vn";
-      srcLabel = "VN";
-    } else if (srcRaw === "CN") {
-      srcClass = "purchase-source-cn";
-      srcLabel = "CN";
-    }
+      const srcRaw = (p.NguonMua || "").toString().trim().toUpperCase();
+      let srcClass = "purchase-source-other";
+      let srcLabel = srcRaw || "-";
+      if (srcRaw === "VN") {
+        srcClass = "purchase-source-vn";
+        srcLabel = "VN";
+      } else if (srcRaw === "CN") {
+        srcClass = "purchase-source-cn";
+        srcLabel = "CN";
+      }
 
-    const actions =
-      window.currentRole === "admin"
-        ? /*html*/ `<div class="action-btns">
+      const actions =
+        window.currentRole === "admin"
+          ? /*html*/ `<div class="action-btns">
              <button class="btn btn-primary btn-sm" onclick="editPurchase(${p.PurchaseId})"><i class="fas fa-edit"></i></button>
              <button class="btn btn-danger btn-sm" onclick="confirmDelete('purchase', ${p.PurchaseId})"><i class="fas fa-trash"></i></button>
            </div>`
-        : "";
+          : "";
 
-    purchasesTableBody.innerHTML += `
+      return `
       <tr>
-        <td>${p.MaThietBi}</td>
-        <td>${p.TenThietBi || ""}</td>
-        <td>${p.LoaiThietBi || ""}</td>
+        <td>${p.MaTaiSan}</td>
+        <td>${p.TenTaiSan || ""}</td>
+        <td>${p.LoaiTaiSan || ""}</td>
         <td>${formatDate(p.NgayNhap)}</td>
         <td>${amount}</td>
         <td>
@@ -743,7 +890,10 @@ function renderPurchasesTable(dataToRender) {
         <td>${actions}</td>
       </tr>
     `;
-  });
+    })
+    .join("");
+
+  purchasesTableBody.innerHTML = htmlRows;
 }
 
 function sortData(data, sortInfo) {
@@ -774,7 +924,199 @@ function sortData(data, sortInfo) {
 /* =========================================
    2. HÀM LỌC VÀ HIỂN THỊ (ĐÃ CẬP NHẬT LOGIC TABS)
    ========================================= */
-function getFilteredDevices() {
+
+// --- [MỚI] Hàm cập nhật State lên thanh địa chỉ (URL) ---
+function updateUrlParams() {
+  const url = new URL(window.location);
+
+  // Lưu Search Box
+  const q = document.getElementById("deviceSearchInput")?.value.trim();
+  if (q) url.searchParams.set("q", q);
+  else url.searchParams.delete("q");
+
+  // Lưu Tab Status
+  if (currentTabStatus) url.searchParams.set("tab", currentTabStatus);
+  else url.searchParams.delete("tab");
+
+  // Lưu Điều kiện lọc 1
+  const f1t = document.getElementById("dynamicFilterType1")?.value;
+  if (f1t) {
+    url.searchParams.set("f1t", f1t);
+    if (f1t === "date") {
+      const s = document.getElementById("dynamicFilterValue1Start")?.value;
+      const e = document.getElementById("dynamicFilterValue1End")?.value;
+      if (s) url.searchParams.set("f1vs", s);
+      else url.searchParams.delete("f1vs");
+      if (e) url.searchParams.set("f1ve", e);
+      else url.searchParams.delete("f1ve");
+      url.searchParams.delete("f1v");
+    } else if (f1t !== "currentMonth") {
+      const v = document.getElementById("dynamicFilterValue1")?.value;
+      if (v) url.searchParams.set("f1v", v);
+      else url.searchParams.delete("f1v");
+      url.searchParams.delete("f1vs");
+      url.searchParams.delete("f1ve");
+    }
+  } else {
+    ["f1t", "f1v", "f1vs", "f1ve"].forEach((k) => url.searchParams.delete(k));
+  }
+
+  // Lưu Điều kiện lọc 2
+  const f2t = document.getElementById("dynamicFilterType2")?.value;
+  if (f2t) {
+    url.searchParams.set("f2t", f2t);
+    if (f2t === "date") {
+      const s = document.getElementById("dynamicFilterValue2Start")?.value;
+      const e = document.getElementById("dynamicFilterValue2End")?.value;
+      if (s) url.searchParams.set("f2vs", s);
+      else url.searchParams.delete("f2vs");
+      if (e) url.searchParams.set("f2ve", e);
+      else url.searchParams.delete("f2ve");
+      url.searchParams.delete("f2v");
+    } else if (f2t !== "currentMonth") {
+      const v = document.getElementById("dynamicFilterValue2")?.value;
+      if (v) url.searchParams.set("f2v", v);
+      else url.searchParams.delete("f2v");
+      url.searchParams.delete("f2vs");
+      url.searchParams.delete("f2ve");
+    }
+  } else {
+    ["f2t", "f2v", "f2vs", "f2ve"].forEach((k) => url.searchParams.delete(k));
+  }
+
+  // --- [MỚI] Lưu Tab Users ---
+  const uq = document.getElementById("userSearchInput")?.value.trim();
+  if (uq) url.searchParams.set("uq", uq);
+  else url.searchParams.delete("uq");
+
+  if (currentUserTabStatus) url.searchParams.set("utab", currentUserTabStatus);
+  else url.searchParams.delete("utab");
+
+  const udep = document.getElementById("userDepartmentFilter")?.value;
+  if (udep) url.searchParams.set("udep", udep);
+  else url.searchParams.delete("udep");
+
+  // --- [MỚI] Lưu Tab Purchases ---
+  const pq = document.getElementById("purchaseSearchInput")?.value.trim();
+  if (pq) url.searchParams.set("pq", pq);
+  else url.searchParams.delete("pq");
+
+  const psrc = document.getElementById("purchaseSourceFilter")?.value;
+  if (psrc) url.searchParams.set("psrc", psrc);
+  else url.searchParams.delete("psrc");
+
+  window.history.replaceState({}, "", url);
+}
+
+// --- [MỚI] Hàm đọc State từ URL và điền lại vào Form ---
+function restoreUrlParams() {
+  const params = new URLSearchParams(window.location.search);
+  let hasFilter = false;
+
+  // Phục hồi Search text
+  if (params.has("q")) {
+    const searchInput = document.getElementById("deviceSearchInput");
+    if (searchInput) searchInput.value = params.get("q");
+    hasFilter = true;
+  }
+
+  // Phục hồi Tab Status
+  if (params.has("tab")) {
+    currentTabStatus = params.get("tab");
+    document
+      .querySelectorAll("#deviceStatusTabs .status-tab")
+      .forEach((t) => t.classList.remove("active"));
+    const tabs = Array.from(
+      document.querySelectorAll("#deviceStatusTabs .status-tab"),
+    );
+    const targetTab = currentTabStatus
+      ? tabs.find(
+        (el) =>
+          el.getAttribute("onclick")?.includes(`'${currentTabStatus}'`) ||
+          el.getAttribute("onclick")?.includes(`"${currentTabStatus}"`),
+      )
+      : tabs.find(
+        (el) =>
+          el.getAttribute("onclick")?.includes("('')") ||
+          el.getAttribute("onclick")?.includes('("")'),
+      );
+    if (targetTab) targetTab.classList.add("active");
+    else if (tabs.length) tabs[0].classList.add("active");
+    hasFilter = true;
+  }
+
+  // --- [MỚI] Phục hồi Tab Users ---
+  if (params.has("uq")) {
+    const uInput = document.getElementById("userSearchInput");
+    if (uInput) uInput.value = params.get("uq");
+    hasFilter = true;
+  }
+  if (params.has("udep")) {
+    const uDep = document.getElementById("userDepartmentFilter");
+    if (uDep) uDep.value = params.get("udep");
+    hasFilter = true;
+  }
+  if (params.has("utab")) {
+    currentUserTabStatus = params.get("utab");
+    document
+      .querySelectorAll("#userStatusTabs .status-tab")
+      .forEach((t) => t.classList.remove("active"));
+    const tabs = Array.from(
+      document.querySelectorAll("#userStatusTabs .status-tab"),
+    );
+    const targetTab = currentUserTabStatus
+      ? tabs.find(
+        (el) =>
+          el.getAttribute("onclick")?.includes(`'${currentUserTabStatus}'`) ||
+          el.getAttribute("onclick")?.includes(`"${currentUserTabStatus}"`),
+      )
+      : tabs.find(
+        (el) =>
+          el.getAttribute("onclick")?.includes("('')") ||
+          el.getAttribute("onclick")?.includes('("")'),
+      );
+    if (targetTab) targetTab.classList.add("active");
+    else if (tabs.length) tabs[0].classList.add("active");
+    hasFilter = true;
+  }
+
+  // --- [MỚI] Phục hồi Tab Purchases ---
+  if (params.has("pq")) {
+    const pInput = document.getElementById("purchaseSearchInput");
+    if (pInput) pInput.value = params.get("pq");
+    hasFilter = true;
+  }
+  if (params.has("psrc")) {
+    const pSrc = document.getElementById("purchaseSourceFilter");
+    if (pSrc) pSrc.value = params.get("psrc");
+    hasFilter = true;
+  }
+
+  // Helper phục hồi dropdown lọc động
+  const restoreDynamic = (idx, paramT, paramV, paramVS, paramVE) => {
+    const tEl = document.getElementById(`dynamicFilterType${idx}`);
+    if (tEl && params.has(paramT)) {
+      tEl.value = params.get(paramT);
+      tEl.dispatchEvent(new Event("change")); // Kích hoạt vẽ thẻ input value
+
+      if (params.get(paramT) === "date") {
+        const start = document.getElementById(`dynamicFilterValue${idx}Start`);
+        const end = document.getElementById(`dynamicFilterValue${idx}End`);
+        if (start && params.has(paramVS)) start.value = params.get(paramVS);
+        if (end && params.has(paramVE)) end.value = params.get(paramVE);
+      } else if (params.get(paramT) !== "currentMonth") {
+        const valEl = document.getElementById(`dynamicFilterValue${idx}`);
+        if (valEl && params.has(paramV)) valEl.value = params.get(paramV);
+      }
+      hasFilter = true;
+    }
+  };
+
+  restoreDynamic(1, "f1t", "f1v", "f1vs", "f1ve");
+  restoreDynamic(2, "f2t", "f2v", "f2vs", "f2ve");
+}
+
+function getBaseFilteredDevices() {
   let filtered = devices;
 
   // --- Lọc theo ô tìm kiếm ---
@@ -784,13 +1126,79 @@ function getFilteredDevices() {
     if (term) {
       filtered = filtered.filter((d) => {
         return (
-          (d.MaThietBi || "").toLowerCase().includes(term) ||
-          (d.TenThietBi || "").toLowerCase().includes(term) ||
-          (d.SerialSN || "").toLowerCase().includes(term)
+          String(d.MaTaiSan || "")
+            .toLowerCase()
+            .includes(term) ||
+          String(d.TenTaiSan || "")
+            .toLowerCase()
+            .includes(term) ||
+          String(d.SerialSN || "")
+            .toLowerCase()
+            .includes(term) ||
+          String(d.LoaiTaiSan || "")
+            .toLowerCase()
+            .includes(term)
         );
       });
     }
   }
+
+  // ================= BẮT ĐẦU CHÈN THÊM =================
+  // --- BẮT ĐẦU: Lọc theo 2 điều kiện động ---
+  function applyCondition(list, index) {
+    const fType = document.getElementById(`dynamicFilterType${index}`)?.value;
+    const fValEl = document.getElementById(`dynamicFilterValue${index}`);
+    const fStartEl = document.getElementById(`dynamicFilterValue${index}Start`);
+    const fEndEl = document.getElementById(`dynamicFilterValue${index}End`);
+
+    if (!fType) return list; // Nếu không chọn điều kiện thì giữ nguyên danh sách
+
+    const val = fValEl ? fValEl.value : null;
+
+    if (fType === "prefix" && val) {
+      return list.filter((d) =>
+        String(d.MaTaiSan || "")
+          .toUpperCase()
+          .startsWith(val.toUpperCase()),
+      );
+    } else if (fType === "type" && val) {
+      return list.filter((d) => d.LoaiTaiSan === val);
+    } else if (fType === "date") {
+      const startVal = fStartEl?.value;
+      const endVal = fEndEl?.value;
+      if (startVal || endVal) {
+        const startDate = startVal ? new Date(startVal).getTime() : 0;
+        const endDate = endVal
+          ? new Date(endVal).getTime() + 86399999
+          : Infinity;
+        return list.filter((d) => {
+          if (!d.NgayNhap) return false;
+          const dt = new Date(d.NgayNhap).getTime();
+          if (isNaN(dt)) return false;
+          return dt >= startDate && dt <= endDate;
+        });
+      }
+    } else if (fType === "currentMonth") {
+      const now = new Date();
+      const currentMonth = now.getMonth();
+      const currentYear = now.getFullYear();
+      return list.filter((d) => {
+        if (!d.NgayNhap) return false;
+        const dt = new Date(d.NgayNhap);
+        if (isNaN(dt.getTime())) return false;
+        return (
+          dt.getMonth() === currentMonth && dt.getFullYear() === currentYear
+        );
+      });
+    }
+    return list; // Trả về danh sách mặc định nếu chưa nhập giá trị
+  }
+
+  // Áp dụng lần lượt Điều kiện 1, sau đó lấy kết quả áp dụng tiếp Điều kiện 2
+  filtered = applyCondition(filtered, 1);
+  filtered = applyCondition(filtered, 2);
+  // --- KẾT THÚC: Lọc theo 2 điều kiện động ---
+  // ================= KẾT THÚC CHÈN THÊM =================
 
   // --- Lọc theo Tháng/Năm (từ biểu đồ) ---
   if (deviceDateFilter) {
@@ -805,29 +1213,39 @@ function getFilteredDevices() {
     });
   }
 
+  return filtered;
+}
+
+function getFilteredDevices() {
+  let filtered = getBaseFilteredDevices();
+
   // --- Lọc theo Tab Trạng Thái ---
   if (currentTabStatus) {
     filtered = filtered.filter((d) => d.Trangthai === currentTabStatus);
   }
 
   // --- Sắp xếp ---
-  // Clone mảng nếu chưa được filter để tránh sort ảnh hưởng mảng gốc khi export
-  if (filtered === devices) {
-    filtered = [...devices];
-  }
+  filtered = [...filtered];
   sortData(filtered, deviceSort);
 
   return filtered;
 }
 
 function applyFiltersAndRender() {
+  // --- Cập nhật URL State (MỚI) ---
+  updateUrlParams();
+
+  // --- Cập nhật số lượng trên các Tabs dựa trên kết quả lọc hiện tại ---
+  const baseFiltered = getBaseFilteredDevices();
+  updateDeviceStatusCounts(baseFiltered);
+
   const filtered = getFilteredDevices();
 
   // --- Cập nhật UI: Hiển thị nút xóa bộ lọc tháng nếu đang lọc ---
   updateDateFilterIndicator();
 
   // --- Cập nhật số lượng hiển thị (MỚI) ---
-  updateDeviceCountLabel(filtered.length, devices.length);
+  updateDeviceCountLabel(filtered.length, baseFiltered.length);
 
   // [QUAN TRỌNG] TÍNH TOÁN PHÂN TRANG (CẮT DỮ LIỆU)
   const totalItems = filtered.length;
@@ -856,6 +1274,9 @@ function applyFiltersAndRender() {
 }
 
 function applyPurchasesFiltersAndRender() {
+  // --- Cập nhật URL State ---
+  updateUrlParams();
+
   if (!purchasesTableBody) return;
 
   const term = purchaseSearchInput.value.toLowerCase().trim();
@@ -872,9 +1293,9 @@ function applyPurchasesFiltersAndRender() {
   const filtered = purchases.filter((p) => {
     const matchesSearch =
       !term ||
-      (p.MaThietBi || "").toLowerCase().includes(term) ||
-      (p.TenThietBi || "").toLowerCase().includes(term) ||
-      (p.LoaiThietBi || "").toLowerCase().includes(term);
+      (p.MaTaiSan || "").toLowerCase().includes(term) ||
+      (p.TenTaiSan || "").toLowerCase().includes(term) ||
+      (p.LoaiTaiSan || "").toLowerCase().includes(term);
 
     let matchesSource = true;
     const srcRaw = (p.NguonMua || "").toString().trim().toUpperCase();
@@ -1045,11 +1466,10 @@ function renderPagination(
   let paginationHTML = "";
 
   // Previous button
-  paginationHTML += `<button class="pagination-btn" ${
-    currentPage === 1 ? "disabled" : ""
-  } onclick="(${onPageClick.toString()})(${currentPage - 1})">${t(
-    "pagination_prev",
-  )}</button>`;
+  paginationHTML += `<button class="pagination-btn" ${currentPage === 1 ? "disabled" : ""
+    } onclick="(${onPageClick.toString()})(${currentPage - 1})">${t(
+      "pagination_prev",
+    )}</button>`;
 
   // Page numbers
   // Logic to show limited page numbers (e.g., 1 ... 4 5 6 ... 10)
@@ -1069,9 +1489,8 @@ function renderPagination(
   }
 
   for (let i = startPage; i <= endPage; i++) {
-    paginationHTML += `<button class="pagination-btn ${
-      i === currentPage ? "active" : ""
-    }" onclick="(${onPageClick.toString()})(${i})">${i}</button>`;
+    paginationHTML += `<button class="pagination-btn ${i === currentPage ? "active" : ""
+      }" onclick="(${onPageClick.toString()})(${i})">${i}</button>`;
   }
 
   if (endPage < totalPages) {
@@ -1082,11 +1501,10 @@ function renderPagination(
   }
 
   // Next button
-  paginationHTML += `<button class="pagination-btn" ${
-    currentPage === totalPages ? "disabled" : ""
-  } onclick="(${onPageClick.toString()})(${currentPage + 1})">${t(
-    "pagination_next",
-  )}</button>`;
+  paginationHTML += `<button class="pagination-btn" ${currentPage === totalPages ? "disabled" : ""
+    } onclick="(${onPageClick.toString()})(${currentPage + 1})">${t(
+      "pagination_next",
+    )}</button>`;
 
   container.innerHTML = paginationHTML;
 }
@@ -1114,7 +1532,7 @@ function updateStats() {
   if (availableDevicesEl) availableDevicesEl.textContent = available;
   if (brokenDevicesEl) brokenDevicesEl.textContent = broken; // Gán số lượng hư hỏng
 
-  // Tính thiết bị mới trong tháng
+  // Tính tài sản mới trong tháng
   const newDevices = devices.filter((d) => {
     const purchaseDate = new Date(d.NgayNhap);
     return (
@@ -1150,156 +1568,88 @@ function updateStats() {
 }
 
 function initCharts() {
-  // --- Year dropdown: chỉ 2025-2026 ---
-  populateYearSelector(["2025", "2026"], 2025);
+  // --- Year dropdown cho biểu đồ tròn/năm phía dưới ---
+  populateYearSelector(["2025", "2026"], 2026);
 
-  // --- TWO monthly charts for Overview: 2025 & 2026 ---
-  const monthlyStats2025 = getMonthlyStats(2025);
-  const monthlyStats2026 = getMonthlyStats(2026);
+  // Lấy năm đang được chọn ở dropdown biểu đồ tháng (Mặc định sẽ là 2026 vì đã set selected ở HTML)
+  const selectedMonthlyYear = parseInt(monthlyChartYearSelector?.value) || 2026;
 
+  // Gọi hàm vẽ biểu đồ tháng
+  renderMonthlyChart(selectedMonthlyYear);
+}
+
+// Hàm mới để vẽ lại biểu đồ tháng khi thay đổi năm
+function renderMonthlyChart(year) {
+  if (!monthlyChartCtx) return;
+
+  const monthlyStats = getMonthlyStats(year);
+
+  // Hủy biểu đồ cũ nếu có trước khi vẽ cái mới
   if (monthlyChart) monthlyChart.destroy();
-  if (monthlyChart2026) monthlyChart2026.destroy();
-  if (yearlyChart) yearlyChart.destroy();
 
-  // set headings text (nếu có span trên trang)
-  if (overviewChartYear1El) overviewChartYear1El.textContent = "2025";
-  if (overviewChartYear2El) overviewChartYear2El.textContent = "2026";
+  monthlyChart = new Chart(monthlyChartCtx, {
+    type: "bar",
+    data: {
+      labels: monthlyStats.labels,
+      datasets: [
+        {
+          label: t("chart_total"),
+          data: monthlyStats.purchased,
+          backgroundColor: "rgba(52,152,219,0.7)",
+        },
+        {
+          label: t("chart_in_use"),
+          data: monthlyStats.active,
+          backgroundColor: "rgba(46,204,113,0.7)",
+        },
+        {
+          label: t("chart_warranty"),
+          data: monthlyStats.maintenance,
+          backgroundColor: "rgba(243,156,18,0.7)",
+        },
+        {
+          label: t("chart_broken"),
+          data: monthlyStats.broken,
+          backgroundColor: "rgba(231,76,60,0.7)",
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      onClick: (evt, elements, chart) => {
+        const activePoints =
+          (elements && elements.length
+            ? elements
+            : chart.getElementsAtEventForMode(
+              evt,
+              "nearest",
+              { intersect: true },
+              true,
+            )) || [];
+        if (!activePoints.length) return;
 
-  if (monthlyChartCtx) {
-    monthlyChart = new Chart(monthlyChartCtx, {
-      type: "bar",
-      data: {
-        labels: monthlyStats2025.labels,
-        datasets: [
-          {
-            label: t("chart_total"),
-            data: monthlyStats2025.purchased,
-            backgroundColor: "rgba(52,152,219,0.7)",
-          },
-          {
-            label: t("chart_in_use"),
-            data: monthlyStats2025.active,
-            backgroundColor: "rgba(46,204,113,0.7)",
-          },
-          {
-            label: t("chart_warranty"),
-            data: monthlyStats2025.maintenance,
-            backgroundColor: "rgba(243,156,18,0.7)",
-          },
-          {
-            label: t("chart_broken"),
-            data: monthlyStats2025.broken,
-            backgroundColor: "rgba(231,76,60,0.7)",
-          },
-        ],
+        const firstPoint = activePoints[0];
+        const monthIndex = firstPoint.index;
+        navigateToDevicesByMonth(year, monthIndex + 1); // Truyền đúng năm đang xem
       },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        // Click cột -> nhảy tới Danh sách thiết bị tháng tương ứng của năm 2025
-        onClick: (evt, elements, chart) => {
-          const activePoints =
-            (elements && elements.length
-              ? elements
-              : chart.getElementsAtEventForMode(
-                  evt,
-                  "nearest",
-                  { intersect: true },
-                  true,
-                )) || [];
-          if (!activePoints.length) return;
-
-          const firstPoint = activePoints[0];
-          const monthIndex = firstPoint.index; // 0..11
-          navigateToDevicesByMonth(2025, monthIndex + 1);
+      plugins: {
+        title: {
+          display: true,
+          text: `${t("chart_monthly_stats_title")} (${year})`,
         },
-        plugins: {
-          title: {
-            display: true,
-            text: `${t("chart_monthly_stats_title")} (2025)`,
-          },
-        },
-        scales: {
-          y: {
-            beginAtZero: true,
-            ticks: {
-              stepSize: 1, // Đảm bảo các bước nhảy là số nguyên
-              callback: (value) =>
-                Number.isInteger(value) ? value : undefined,
-            },
+      },
+      scales: {
+        y: {
+          beginAtZero: true,
+          ticks: {
+            stepSize: 1,
+            callback: (value) => (Number.isInteger(value) ? value : undefined),
           },
         },
       },
-    });
-  }
-
-  if (monthlyChart2026Ctx) {
-    monthlyChart2026 = new Chart(monthlyChart2026Ctx, {
-      type: "bar",
-      data: {
-        labels: monthlyStats2026.labels,
-        datasets: [
-          {
-            label: t("chart_total"),
-            data: monthlyStats2026.purchased,
-            backgroundColor: "rgba(52,152,219,0.7)",
-          },
-          {
-            label: t("chart_in_use"),
-            data: monthlyStats2026.active,
-            backgroundColor: "rgba(46,204,113,0.7)",
-          },
-          {
-            label: t("chart_warranty"),
-            data: monthlyStats2026.maintenance,
-            backgroundColor: "rgba(243,156,18,0.7)",
-          },
-          {
-            label: t("chart_broken"),
-            data: monthlyStats2026.broken,
-            backgroundColor: "rgba(231,76,60,0.7)",
-          },
-        ],
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        // Click cột -> nhảy tới Danh sách thiết bị tháng tương ứng của năm 2026
-        onClick: (evt, elements, chart) => {
-          const activePoints =
-            (elements && elements.length
-              ? elements
-              : chart.getElementsAtEventForMode(
-                  evt,
-                  "nearest",
-                  { intersect: true },
-                  true,
-                )) || [];
-          if (!activePoints.length) return;
-
-          const firstPoint = activePoints[0];
-          const monthIndex = firstPoint.index; // 0..11
-          navigateToDevicesByMonth(2026, monthIndex + 1);
-        },
-        plugins: {
-          title: {
-            display: true,
-            text: `${t("chart_monthly_stats_title")} (2026)`,
-          },
-        },
-        scales: {
-          y: {
-            beginAtZero: true,
-            ticks: {
-              stepSize: 1, // Đảm bảo các bước nhảy là số nguyên
-              callback: (value) =>
-                Number.isInteger(value) ? value : undefined,
-            },
-          },
-        },
-      },
-    });
-  }
+    },
+  });
 }
 
 function getMonthlyStats(year) {
@@ -1482,15 +1832,15 @@ function addDevice() {
   deviceModal.style.display = "flex";
 }
 function editDevice(id) {
-  const d = devices.find((x) => x.MaThietBi === id);
+  const d = devices.find((x) => x.MaTaiSan === id);
   if (!d) return;
   currentDeviceId = id;
   deviceForm.reset();
   handleCategoryChange();
-  document.getElementById("MaThietBi").value = d.MaThietBi;
-  document.getElementById("TenThietBi").value = d.TenThietBi;
+  document.getElementById("MaTaiSan").value = d.MaTaiSan;
+  document.getElementById("TenTaiSan").value = d.TenTaiSan;
 
-  const typeNorm = normalizeLoaiThietBi(d.LoaiThietBi);
+  const typeNorm = normalizeLoaiTaiSan(d.LoaiTaiSan);
 
   const category = getDeviceCategory(typeNorm);
   if (category) {
@@ -1527,9 +1877,9 @@ async function saveDevice() {
   }
   // [KẾT THÚC ĐOẠN MỚI] ===============================================
   const payload = {
-    MaThietBi: document.getElementById("MaThietBi").value.trim(),
-    TenThietBi: document.getElementById("TenThietBi").value.trim(),
-    LoaiThietBi: document.getElementById("LoaiThietBi").value,
+    MaTaiSan: document.getElementById("MaTaiSan").value.trim(),
+    TenTaiSan: document.getElementById("TenTaiSan").value.trim(),
+    LoaiTaiSan: document.getElementById("LoaiTaiSan").value,
     SerialSN: document.getElementById("SerialSN").value.trim(),
     NgayNhap: document.getElementById("NgayNhap").value,
     Trangthai: document.getElementById("Trangthai").value,
@@ -1558,9 +1908,9 @@ async function saveDevice() {
   }
   // [KẾT THÚC ĐOẠN CHÈN] ----------------------------------------------------
 
-  if (!payload.MaThietBi || !payload.TenThietBi)
+  if (!payload.MaTaiSan || !payload.TenTaiSan)
     return showAlert(t("alert_enter_device_code_name"), false);
-  if (!payload.LoaiThietBi)
+  if (!payload.LoaiTaiSan)
     return showAlert(t("alert_select_device_type"), false);
   if (!payload.NgayNhap || isNaN(new Date(payload.NgayNhap).getTime()))
     return showAlert(t("alert_invalid_import_date"), false);
@@ -1570,7 +1920,7 @@ async function saveDevice() {
     const dup = devices.some(
       (d) =>
         (d.SerialSN || "").trim().toLowerCase() === serialNorm &&
-        (currentDeviceId ? d.MaThietBi !== currentDeviceId : true),
+        (currentDeviceId ? d.MaTaiSan !== currentDeviceId : true),
     );
     if (dup) {
       showAlert(t("alert_serial_exists"), false);
@@ -1656,14 +2006,14 @@ async function saveUser() {
 
   try {
     if (prevDeviceId && prevDeviceId !== payload.Thietbisudung) {
-      const prevDev = devices.find((d) => d.MaThietBi === prevDeviceId);
+      const prevDev = devices.find((d) => d.MaTaiSan === prevDeviceId);
       await updateDeviceFull(prevDev, {
         Trangthai: "Sẵn sàng",
         Nguoisudung: null,
       });
     }
     if (payload.Thietbisudung) {
-      const newDev = devices.find((d) => d.MaThietBi === payload.Thietbisudung);
+      const newDev = devices.find((d) => d.MaTaiSan === payload.Thietbisudung);
       await updateDeviceFull(newDev, {
         Trangthai: "Đang sử dụng",
         Nguoisudung: payload.HoVaTen,
@@ -1698,13 +2048,13 @@ function addPurchase() {
 
 async function savePurchase() {
   const payload = {
-    MaThietBi: document.getElementById("purchaseDevice").value,
+    MaTaiSan: document.getElementById("purchaseDevice").value,
     NgayNhap: document.getElementById("purchaseDate").value,
     ThanhTien: document.getElementById("purchasePrice").value || null,
     NguonMua: document.getElementById("purchaseSource").value.trim() || null,
   };
 
-  if (!payload.MaThietBi) {
+  if (!payload.MaTaiSan) {
     return showAlert(t("alert_select_device"), false);
   }
   if (!payload.NgayNhap) {
@@ -1742,6 +2092,13 @@ function confirmDelete(type, id) {
     showAlert(t("alert_no_delete_permission"), false);
     return;
   }
+
+  // THÊM ĐOẠN NÀY ĐỂ CHẶN LỖI
+  if (!id || id.trim() === "") {
+    showAlert("Không thể xóa bản ghi này vì dữ liệu bị thiếu ID!", false);
+    return;
+  }
+
   deleteType = type;
   deleteId = id;
   const messageEl = document.getElementById("deleteMessage");
@@ -1783,7 +2140,7 @@ async function deleteItem() {
 /***********************
  * HELPERS
  ***********************/
-function normalizeLoaiThietBi(v) {
+function normalizeLoaiTaiSan(v) {
   if (v === null || v === undefined) return "";
   return String(v)
     .replace(/\r?\n+/g, " ") // xoá xuống dòng
@@ -1791,8 +2148,8 @@ function normalizeLoaiThietBi(v) {
     .replace(/\s+/g, " "); // gộp nhiều khoảng trắng
 }
 
-function normalizeLoaiThietBiCompact(v) {
-  return normalizeLoaiThietBi(v)
+function normalizeLoaiTaiSanCompact(v) {
+  return normalizeLoaiTaiSan(v)
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "") // bỏ dấu tiếng Việt
@@ -1866,8 +2223,8 @@ function showAlert(message, isSuccess) {
 async function updateDeviceFull(dev, overrides = {}) {
   if (!dev) return null;
   const body = {
-    TenThietBi: dev.TenThietBi || "",
-    LoaiThietBi: dev.LoaiThietBi || "",
+    TenTaiSan: dev.TenTaiSan || "",
+    LoaiTaiSan: dev.LoaiTaiSan || "",
     SerialSN: dev.SerialSN || "",
     NgayNhap: dev.NgayNhap ? formatDate(dev.NgayNhap) : null,
     Trangthai: dev.Trangthai || "Sẵn sàng",
@@ -1875,7 +2232,7 @@ async function updateDeviceFull(dev, overrides = {}) {
     Vitri: dev.Vitri || null, // [FIX] Thêm dòng này để giữ lại Vị trí cũ
     ...overrides,
   };
-  return fetchJson(`/api/devices/${dev.MaThietBi}`, {
+  return fetchJson(`/api/devices/${dev.MaTaiSan}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -1913,12 +2270,12 @@ function loadDevicesForUserSelect(selectedId = null) {
   const sel = document.getElementById("userDevice");
   sel.innerHTML = `<option value="">${t("noUser")}</option>`;
   devices
-    .filter((d) => d.Trangthai === "Sẵn sàng" || d.MaThietBi === selectedId)
+    .filter((d) => d.Trangthai === "Sẵn sàng" || d.MaTaiSan === selectedId)
     .forEach((d) => {
       const opt = document.createElement("option");
-      opt.value = d.MaThietBi;
-      opt.textContent = `${d.TenThietBi} (${d.MaThietBi})`;
-      if (selectedId && d.MaThietBi === selectedId) opt.selected = true;
+      opt.value = d.MaTaiSan;
+      opt.textContent = `${d.TenTaiSan} (${d.MaTaiSan})`;
+      if (selectedId && d.MaTaiSan === selectedId) opt.selected = true;
       sel.appendChild(opt);
     });
 }
@@ -1928,7 +2285,7 @@ function loadDevicesForUserSelect(selectedId = null) {
  * @param {string} status - Trạng thái cần lọc (ví dụ: 'Đang sử dụng').
  */
 function navigateToDevicesWithFilter(status) {
-  // Tìm link "Danh sách thiết bị" trong sidebar và click vào nó
+  // Tìm link "Danh sách tài sản" trong sidebar và click vào nó
   const deviceListLink = document.querySelector('a[data-section="devices"]');
   if (deviceListLink) {
     deviceListLink.click();
@@ -1939,9 +2296,9 @@ function navigateToDevicesWithFilter(status) {
   applyFiltersAndRender();
 }
 
-// Điều hướng từ biểu đồ -> Danh sách thiết bị theo tháng nhập
+// Điều hướng từ biểu đồ -> Danh sách tài sản theo tháng nhập
 function navigateToDevicesByMonth(year, month) {
-  // Mở tab "Danh sách thiết bị"
+  // Mở tab "Danh sách tài sản"
   const deviceListLink = document.querySelector('a[data-section="devices"]');
   if (deviceListLink) {
     deviceListLink.click();
@@ -1996,7 +2353,7 @@ loginBtn.addEventListener("click", async () => {
       userAvatar.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(
         window.displayName || window.currentUsername,
       )}&background=3498db&color=fff`;
-  } catch (_) {}
+  } catch (_) { }
 
   loginPage.style.display = "none";
   appContainer.style.display = "block";
@@ -2026,10 +2383,45 @@ loginBtn.addEventListener("click", async () => {
       if (addUserBtn) addUserBtn.disabled = true;
       if (addPurchaseBtn) addPurchaseBtn.disabled = true;
     }
-    chartsLink.click();
-    if (yearlyChartYearSelector) {
-      yearlyChartYearSelector.value = "2025";
-      updateChartSection(2025);
+
+    // [MỚI] Quyết định hiển thị trang nào sau khi đăng nhập thành công
+    const params = new URLSearchParams(window.location.search);
+    const hasDeviceFilter =
+      params.has("q") ||
+      params.has("f1t") ||
+      params.has("f2t") ||
+      params.has("tab");
+    const hasUserFilter =
+      params.has("uq") || params.has("utab") || params.has("udep");
+    const hasPurchaseFilter = params.has("pq") || params.has("psrc");
+
+    if (hasDeviceFilter || hasUserFilter || hasPurchaseFilter) {
+      // Nhảy vào tab tương ứng với bộ lọc trên link
+      let targetSection = "devices";
+      if (hasUserFilter) targetSection = "users";
+      if (hasPurchaseFilter) targetSection = "purchases";
+
+      const targetLink = document.querySelector(
+        `a[data-section="${targetSection}"]`,
+      );
+      if (targetLink && !targetLink.classList.contains("active")) {
+        document
+          .querySelectorAll(".sidebar-menu a")
+          .forEach((i) => i.classList.remove("active"));
+        targetLink.classList.add("active");
+        document
+          .querySelectorAll(".content-section")
+          .forEach((sec) => (sec.style.display = "none"));
+        const sec = document.getElementById(`${targetSection}Section`);
+        if (sec) sec.style.display = "block";
+      }
+    } else {
+      // Nếu link trang chủ bình thường thì nhảy vào Chart
+      chartsLink.click();
+      if (yearlyChartYearSelector) {
+        yearlyChartYearSelector.value = "2026";
+        updateChartSection(2026);
+      }
     }
   }
 });
@@ -2046,7 +2438,7 @@ logoutBtn.addEventListener("click", () => {
     if (userAvatar)
       userAvatar.src =
         "https://ui-avatars.com/api/?name=User&background=3498db&color=fff";
-  } catch (_) {}
+  } catch (_) { }
   appContainer.style.display = "none";
   loginPage.style.display = "flex";
 });
@@ -2059,6 +2451,160 @@ exportUsersExcelBtn?.addEventListener("click", exportUsersToExcel);
 // Purchases
 exportPurchasesExcelBtn?.addEventListener("click", exportPurchasesToExcel);
 addPurchaseBtn?.addEventListener("click", addPurchase);
+
+// --- Xử lý giao diện cho 2 Cụm bộ lọc động ---
+function setupDynamicFilter(index) {
+  const typeEl = document.getElementById(`dynamicFilterType${index}`);
+  if (!typeEl) return;
+
+  typeEl.addEventListener("change", function () {
+    const container = document.getElementById(
+      `dynamicFilterValueContainer${index}`,
+    );
+    const type = this.value;
+
+    container.innerHTML = "";
+    container.style.display = type ? "flex" : "none";
+    container.style.gap = "5px";
+
+    if (type === "prefix") {
+      if (type === "prefix") {
+        container.innerHTML = `
+        <select id="dynamicFilterValue${index}" style="border-radius: 8px; border: 1px solid #ddd; padding: 0 10px; height: 36px; outline: none; font-size: 0.9rem;">
+          <option value="" data-i18n="selectPrefix">${t("selectPrefix")}</option>
+          <option value="EQP" data-i18n="prefix_EQP">${t("prefix_EQP")}</option>
+          <option value="OFE" data-i18n="prefix_OFE">${t("prefix_OFE")}</option>
+          <option value="VEH" data-i18n="prefix_VEH">${t("prefix_VEH")}</option>
+          <option value="MGTE" data-i18n="prefix_MGTE">${t("prefix_MGTE")}</option>
+          <option value="MCH" data-i18n="prefix_MCH">${t("prefix_MCH")}</option>
+        </select>
+      `;
+      }
+    } else if (type === "type") {
+      const uniqueTypes = [
+        ...new Set(devices.map((d) => d.LoaiTaiSan).filter(Boolean)),
+      ].sort();
+      let optionsHtml = `<option value="" data-i18n="selectType">${t("selectType")}</option>`;
+      uniqueTypes.forEach(
+        (t) => (optionsHtml += `<option value="${t}">${t}</option>`),
+      );
+      container.innerHTML = `
+        <select id="dynamicFilterValue${index}" style="border-radius: 8px; border: 1px solid #ddd; padding: 0 10px; height: 36px; outline: none; max-width: 200px; font-size: 0.9rem;">
+          ${optionsHtml}
+        </select>
+      `;
+    } else if (type === "date") {
+      container.innerHTML = `
+        <input type="date" id="dynamicFilterValue${index}Start" style="border-radius: 8px; border: 1px solid #ddd; padding: 0 5px; height: 36px; outline: none; font-size: 0.9rem; max-width: 130px;" title="Từ ngày">
+        <span style="color: #64748b;">-</span>
+        <input type="date" id="dynamicFilterValue${index}End" style="border-radius: 8px; border: 1px solid #ddd; padding: 0 5px; height: 36px; outline: none; font-size: 0.9rem; max-width: 130px;" title="Đến ngày">
+      `;
+    } else if (type === "currentMonth") {
+      const now = new Date();
+      const currentMonthStr = t("month_" + (now.getMonth() + 1));
+      const currentYear = now.getFullYear();
+      container.innerHTML = `
+        <input type="text" id="dynamicFilterValue${index}" value="${currentMonthStr} ${currentYear}" disabled style="border-radius: 8px; border: 1px solid #ddd; padding: 0 10px; height: 36px; outline: none; font-size: 0.9rem; background-color: #f1f5f9; color: #475569; width: 130px; text-align: center; cursor: not-allowed;">
+      `;
+    }
+    // LƯU Ý: Không tự động chạy applyFiltersAndRender() ở đây nữa!
+  });
+}
+
+// Khởi tạo giao diện cho cả 2 ô
+setupDynamicFilter(1);
+setupDynamicFilter(2);
+
+// --- BẮT ĐẦU: XỬ LÝ RÀNG BUỘC GIỮA ĐIỀU KIỆN 1 VÀ ĐIỀU KIỆN 2 ---
+const filterType1 = document.getElementById("dynamicFilterType1");
+const filterType2 = document.getElementById("dynamicFilterType2");
+
+if (filterType1 && filterType2) {
+  filterType1.addEventListener("change", function () {
+    const val1 = this.value;
+    const currentVal2 = filterType2.value; // Lưu lại giá trị hiện tại của ĐK2
+
+    // 1. Tạo chuỗi HTML cho option mặc định
+    let optionsHtml = `<option value="" data-i18n="filterCondition2">${t("filterCondition2")}</option>`;
+
+    // 2. Logic: Trả lại tùy chọn cho ĐK2, ngoại trừ tùy chọn đã chọn ở ĐK1
+    if (val1 !== "prefix") optionsHtml += `<option value="prefix" data-i18n="filterByPrefix">${t("filterByPrefix")}</option>`;
+    if (val1 !== "type") optionsHtml += `<option value="type" data-i18n="filterByType">${t("filterByType")}</option>`;
+    if (val1 !== "date") optionsHtml += `<option value="date" data-i18n="filterByDate">${t("filterByDate")}</option>`;
+    if (val1 !== "currentMonth") optionsHtml += `<option value="currentMonth" data-i18n="filterByCurrentMonth">${t("filterByCurrentMonth")}</option>`;
+
+    // Nếu ĐK2 đang trùng với ĐK1, reset nó về rỗng
+    if (currentVal2 && currentVal2 === val1) {
+      filterType2.value = "";
+      filterType2.dispatchEvent(new Event("change"));
+    }
+
+    // 3. Cập nhật lại HTML cho ĐK2
+    filterType2.innerHTML = optionsHtml;
+
+    // 4. Giữ lại lựa chọn của ĐK2 nếu lựa chọn đó vẫn hợp lệ trong danh sách mới
+    if (filterType2.querySelector(`option[value="${currentVal2}"]`)) {
+      filterType2.value = currentVal2;
+    }
+  });
+}
+// --- KẾT THÚC: XỬ LÝ RÀNG BUỘC ---
+
+// Bắt sự kiện chỉ lọc khi bấm nút "Tra Cứu"
+document.getElementById("btnExecuteSearch")?.addEventListener("click", () => {
+  deviceCurrentPage = 1;
+  applyFiltersAndRender();
+});
+
+// --- BẮT ĐẦU: Tạo nút "Xoá bộ lọc" động bên cạnh nút Tra cứu ---
+const btnExecuteSearch = document.getElementById("btnExecuteSearch");
+if (btnExecuteSearch && !document.getElementById("btnClearAllFilters")) {
+  const clearBtn = document.createElement("button");
+  clearBtn.id = "btnClearAllFilters";
+  clearBtn.className = "btn"; // Dùng class btn mặc định của hệ thống
+  clearBtn.style.backgroundColor = "#94a3b8"; // Màu xám nhạt trung tính
+  clearBtn.style.color = "white";
+  clearBtn.innerHTML = '<i class="fas fa-times"></i> Xóa bộ lọc';
+
+  clearBtn.addEventListener("click", () => {
+    // 1. Xóa nội dung tìm kiếm
+    const searchInput = document.getElementById("deviceSearchInput");
+    if (searchInput) searchInput.value = "";
+
+    // 2. Xóa bộ lọc động
+    [1, 2].forEach((idx) => {
+      const typeEl = document.getElementById(`dynamicFilterType${idx}`);
+      if (typeEl) {
+        typeEl.value = "";
+        typeEl.dispatchEvent(new Event("change")); // Kích hoạt sự kiện để ô nhập liệu tự biến mất
+      }
+    });
+
+    // 3. Xóa trạng thái Tab về "Tất cả"
+    currentTabStatus = "";
+    document
+      .querySelectorAll("#deviceStatusTabs .status-tab")
+      .forEach((t) => t.classList.remove("active"));
+    const allTab = document.querySelector(
+      "#deviceStatusTabs .status-tab:first-child",
+    );
+    if (allTab) allTab.classList.add("active");
+
+    // 4. Xóa bộ lọc tháng (nếu bấm vào từ biểu đồ)
+    deviceDateFilter = null;
+
+    // 5. Trả về trang 1 và render lại bảng (Hàm updateUrlParams sẽ tự động dọn URL)
+    deviceCurrentPage = 1;
+    applyFiltersAndRender();
+  });
+
+  // Chèn nút này ngay sau nút Tra cứu
+  btnExecuteSearch.parentNode.insertBefore(
+    clearBtn,
+    btnExecuteSearch.nextSibling,
+  );
+}
+// --- KẾT THÚC: Tạo nút "Xoá bộ lọc" ---
 
 // Filter/Search events
 
@@ -2235,7 +2781,7 @@ menuItems.forEach((item) => {
     );
     elementsToAnimate.forEach((el) => el.classList.add("animate-in"));
 
-    // Nếu người dùng tự bấm menu "Danh sách thiết bị" thì bỏ filter tháng
+    // Nếu người dùng tự bấm menu "Danh sách tài sản" thì bỏ filter tháng
     if (sectionId === "devicesSection") {
       deviceDateFilter = null;
       deviceCurrentPage = 1;
@@ -2244,13 +2790,19 @@ menuItems.forEach((item) => {
 
     // Special handling for charts that need redraw
     if (sectionId === "chartSection") {
-      const y = parseInt(yearlyChartYearSelector?.value) || 2025;
+      const y = parseInt(yearlyChartYearSelector?.value) || 2026;
       setTimeout(() => updateChartSection(y), 0);
     }
     if (sectionId === "accountsSection") {
       loadAccounts();
     }
   });
+});
+
+// Sự kiện đổi năm cho biểu đồ tháng (MỚI THÊM)
+monthlyChartYearSelector?.addEventListener("change", (e) => {
+  const selectedYear = parseInt(e.target.value) || 2026;
+  renderMonthlyChart(selectedYear);
 });
 
 // Change year -> redraw yearly chart
@@ -2328,11 +2880,11 @@ function ensureQrUI() {
       <div id="qrContainer" class="center" style="min-height:150px;border:1px dashed #ccc;border-radius:6px;padding:8px;"></div>
       <div class="row" style="margin-top:8px;gap:8px;">
         <button type="button" class="btn btn-primary" id="generateQrBtn" data-i18n="generateQr">${t(
-          "generateQr",
-        )}</button>
+    "generateQr",
+  )}</button>
         <button type="button" class="btn btn-primary" id="downloadQrBtn" disabled data-i18n="downloadQr">${t(
-          "downloadQr",
-        )}</button>
+    "downloadQr",
+  )}</button>
       </div>
       <div class="muted">QR sẽ mở trang thông tin thiết bị (display.html).</div>
     </div>
@@ -2364,7 +2916,7 @@ async function generateDeviceQR() {
   } catch (e) {
     useRemote = true;
   }
-  const id = document.getElementById("MaThietBi").value.trim();
+  const id = document.getElementById("MaTaiSan").value.trim();
   if (!id) return showAlert(t("alert_enter_device_code_for_qr"), false);
   const url = buildDeviceDisplayUrl(id);
 
@@ -2404,7 +2956,7 @@ async function generateDeviceQR() {
   }
 }
 function downloadDeviceQR() {
-  const id = document.getElementById("MaThietBi").value.trim() || "device";
+  const id = document.getElementById("MaTaiSan").value.trim() || "device";
   let canvas = lastQrCanvas;
   if (!canvas) {
     if (!lastQrImg) return showAlert(t("alert_no_qr_to_download"), false);
@@ -2469,24 +3021,6 @@ function applyTranslations() {
     if (el) el.textContent = dict[key] || key;
   };
 
-  // Overview Section monthly chart titles
-  const overviewChartTitle1Base = document.querySelector(
-    'h3[data-i18n-base="monthlyStatsByYearPrefix"] #overviewChartYear1',
-  )?.parentNode;
-  if (overviewChartTitle1Base) {
-    overviewChartTitle1Base.childNodes[0].textContent = t(
-      "monthlyStatsByYearPrefix",
-    );
-  }
-  const overviewChartTitle2Base = document.querySelector(
-    'h3[data-i18n-base="monthlyStatsByYearPrefix"] #overviewChartYear2',
-  )?.parentNode;
-  if (overviewChartTitle2Base) {
-    overviewChartTitle2Base.childNodes[0].textContent = t(
-      "monthlyStatsByYearPrefix",
-    );
-  }
-
   const setI18nText = (element, key) => {
     if (element) {
       element.textContent = dict[key] || key;
@@ -2531,9 +3065,9 @@ function applyTranslations() {
   setText("#addDeviceBtn", "addDevice");
   setText("#exportDevicesExcelBtn", "exportExcel");
   setPlaceholder("#deviceSearchInput", "deviceSearchInputPlaceholder"); // Assuming key exists
-  setText('th[data-sort-key="MaThietBi"]', "deviceCode");
-  setText('th[data-sort-key="TenThietBi"]', "deviceName");
-  setText('th[data-sort-key="LoaiThietBi"]', "deviceType");
+  setText('th[data-sort-key="MaTaiSan"]', "deviceCode");
+  setText('th[data-sort-key="TenTaiSan"]', "deviceName");
+  setText('th[data-sort-key="LoaiTaiSan"]', "deviceType");
   setText('th[data-sort-key="SerialSN"]', "serialNumber");
   setText('th[data-sort-key="NgayNhap"]', "importDate");
   setText('th[data-sort-key="Trangthai"]', "status");
@@ -2627,9 +3161,9 @@ function exportToExcel(data, headers, sheetName, fileName) {
 
 function exportDevicesToExcel() {
   const headers = [
-    "MaThietBi",
-    "TenThietBi",
-    "LoaiThietBi",
+    "MaTaiSan",
+    "TenTaiSan",
+    "LoaiTaiSan",
     "SerialSN",
     "NgayNhap",
     "Trangthai",
@@ -2640,22 +3174,22 @@ function exportDevicesToExcel() {
 
   // Sử dụng danh sách đã lọc thay vì toàn bộ devices
   const dataToExport = getFilteredDevices().map((d) => ({
-    MaThietBi: d.MaThietBi,
-    TenThietBi: d.TenThietBi,
-    LoaiThietBi: d.LoaiThietBi,
+    MaTaiSan: d.MaTaiSan,
+    TenTaiSan: d.TenTaiSan,
+    LoaiTaiSan: d.LoaiTaiSan,
     SerialSN: d.SerialSN || "",
     NgayNhap: d.NgayNhap ? formatDate(d.NgayNhap) : "",
     Trangthai: d.Trangthai || "",
     Nguoisudung: d.Nguoisudung || "",
     Vitri: d.Vitri || "", // 👈 ĐẨY VỊ TRÍ RA EXCEL
     // URL dùng cho QR trong Bartender
-    QRcode: buildDeviceDisplayUrl(d.MaThietBi),
+    QRcode: buildDeviceDisplayUrl(d.MaTaiSan),
   }));
 
   exportToExcel(
     dataToExport,
     headers,
-    "Danh sách thiết bị",
+    "Danh sách tài sản",
     "DanhSachThietBi.xlsx",
   );
 }
@@ -2680,9 +3214,9 @@ async function importDevicesFromExcel(file) {
       }
 
       const requiredCols = [
-        "MaThietBi",
-        "TenThietBi",
-        "LoaiThietBi",
+        "MaTaiSan",
+        "TenTaiSan",
+        "LoaiTaiSan",
         "SerialSN",
         "NgayNhap",
         "Trangthai",
@@ -2700,16 +3234,16 @@ async function importDevicesFromExcel(file) {
 
       for (const r of rows) {
         const payload = {
-          MaThietBi: r.MaThietBi || "",
-          TenThietBi: r.TenThietBi || "",
-          LoaiThietBi: r.LoaiThietBi || "",
+          MaTaiSan: r.MaTaiSan || "",
+          TenTaiSan: r.TenTaiSan || "",
+          LoaiTaiSan: r.LoaiTaiSan || "",
           SerialSN: r.SerialSN || "",
           NgayNhap: r.NgayNhap || "",
           Trangthai: r.Trangthai || "Sẵn sàng",
           Nguoisudung: r.Nguoisudung || "",
         };
 
-        if (!payload.MaThietBi || !payload.TenThietBi) {
+        if (!payload.MaTaiSan || !payload.TenTaiSan) {
           fail++;
           continue;
         }
@@ -2767,9 +3301,9 @@ function exportUsersToExcel() {
 function exportPurchasesToExcel() {
   const headers = [
     "PurchaseId",
-    "MaThietBi",
-    "TenThietBi",
-    "LoaiThietBi",
+    "MaTaiSan",
+    "TenTaiSan",
+    "LoaiTaiSan",
     "NgayNhap",
     "ThanhTien",
     "NguonMua",
@@ -2782,9 +3316,9 @@ function exportPurchasesToExcel() {
 
   const dataToExport = purchases.map((p) => ({
     PurchaseId: p.PurchaseId,
-    MaThietBi: p.MaThietBi,
-    TenThietBi: p.TenThietBi || "",
-    LoaiThietBi: p.LoaiThietBi || "",
+    MaTaiSan: p.MaTaiSan,
+    TenTaiSan: p.TenTaiSan || "",
+    LoaiTaiSan: p.LoaiTaiSan || "",
     NgayNhap: formatDate(p.NgayNhap),
 
     // ⭐ Dùng hàm formatCurrencyVND, để blankIfEmpty = true cho Excel
@@ -2806,7 +3340,7 @@ function exportPurchasesToExcel() {
   );
 }
 
-/* ====== LOẠI THIẾT BỊ ====== */
+/* ====== LOẠI TÀI SẢN ====== */
 const deviceTypes = {
   vanphong: {
     dev_type_server: "Máy chủ主机",
@@ -2840,11 +3374,16 @@ const deviceTypes = {
     dev_type_air_conditioner: "Máy Lạnh空调",
     dev_type_water_dispenser: "Máy nước nóng lạnh冷热水机",
     dev_type_dryer: "Máy Sấy",
+    dev_type_vacuum_cleaner: "Máy hút bụi吸尘器",
     dev_type_coffee_machine: "Máy pha cà phê咖啡机",
     dev_type_electric_kettle: "Bình đun siêu tốc电热水壶",
     dev_type_microwave_oven: "Lò vi sóng电磁炉",
     dev_type_fan: "Quạt máy",
+    dev_type_standing_fan: "Quạt đứng 站风扇",
+    dev_type_Ventilation_fan: "Quạt thông gió 排风扇",
+    dev_type_wallmounted_fan: "Quạt treo tường 挂壁扇",
     dev_type_tripod: "Chân máy ảnh(tripod)相机三脚架",
+    dev_type_SSD: "Ổ Cứng SSD",
   },
   sanxuat: {
     dev_type_iron: "Bàn Ủi烫台",
@@ -2910,6 +3449,10 @@ const deviceTypes = {
     dev_type_car: "Xe hơi 汽车",
   },
   quanly: {
+    dev_type_stainless_table_1_6m: "Bàn inox(1.6m) 不锈钢桌(1.6m)",
+    dev_type_stainless_table_2_0m: "Bàn inox(2.0m) 不锈钢桌(2.0m)",
+    dev_type_stainless_table_2_4m: "Bàn inox(2.4m) 不锈钢桌(2.4m)",
+    dev_type_stainless_chair: "Ghế inox 不锈钢椅",
     dev_type_inspection_table: "Bàn Kiểm Hàng",
     dev_type_mannequin: "Ma-nơ-canh 模特",
     dev_type_bed_mattress: "Giường + Nệm 床+床垫",
@@ -2930,6 +3473,7 @@ const deviceTypes = {
     dev_type_file_cabinet: "Tủ đựng hồ sơ 文件柜",
     dev_type_personal_locker: "Tủ cá nhân 个人柜子",
     dev_type_safe_large: "Két sắt(Lớn) 保险柜(大）",
+    dev_type_watertank: "Bồn nước inox 不锈钢水箱",
   },
   taisankhac: {
     dev_type_power_bank_gift: "Sạc dự phòng(Quà tặng)",
@@ -2939,14 +3483,14 @@ const deviceTypes = {
   nhacua: {},
 };
 function getDeviceCategory(deviceType) {
-  const norm = normalizeLoaiThietBi(deviceType);
+  const norm = normalizeLoaiTaiSan(deviceType);
   if (!norm) return null;
 
-  const needle = normalizeLoaiThietBiCompact(norm);
+  const needle = normalizeLoaiTaiSanCompact(norm);
 
   for (const category in deviceTypes) {
     for (const v of Object.values(deviceTypes[category] || {})) {
-      if (normalizeLoaiThietBiCompact(v) === needle) return category;
+      if (normalizeLoaiTaiSanCompact(v) === needle) return category;
     }
   }
   return null;
@@ -2955,7 +3499,7 @@ function getDeviceCategory(deviceType) {
 function handleCategoryChange(selectedValue = null) {
   const categoryContainer = document.getElementById("deviceCategoryContainer");
   const detailRow = document.getElementById("deviceDetailRow");
-  const typeSelect = document.getElementById("LoaiThietBi");
+  const typeSelect = document.getElementById("LoaiTaiSan");
   if (!categoryContainer || !detailRow || !typeSelect) return;
 
   const selectedRadio = categoryContainer.querySelector(
@@ -3089,37 +3633,49 @@ async function loadAccounts() {
   const tbody = document.getElementById("accountsTableBody");
   if (!tbody) return;
 
-  tbody.innerHTML = ""; // Xóa dữ liệu cũ
+  if (!data || data.length === 0) {
+    tbody.innerHTML =
+      '<tr><td colspan="6" style="text-align:center; padding: 20px;">Không có dữ liệu</td></tr>';
+    return;
+  }
 
-  data.forEach((acc, index) => {
-    // Format ngày tạo
-    const dateStr = acc.CreatedAt
-      ? new Date(acc.CreatedAt).toLocaleDateString("vi-VN")
-      : "-";
+  const htmlRows = data
+    .map((acc, index) => {
+      // Format ngày tạo
+      const dateStr = acc.CreatedAt
+        ? new Date(acc.CreatedAt).toLocaleDateString("vi-VN")
+        : "-";
 
-    // Logic nút xóa
-    const isMe = acc.Username === window.currentUsername;
-    const isSuperAdmin = acc.Username === "admin";
+      // Logic phân quyền nút thao tác
+      const isMe = acc.Username === window.currentUsername;
+      const isSuperAdmin = acc.Username === "admin"; // Bảo vệ tuyệt đối tài khoản admin gốc
 
-    let deleteBtn = "";
-    if (!isMe && !isSuperAdmin) {
-      deleteBtn = `<button class="btn btn-danger btn-sm" onclick="deleteAccount('${acc.Username}')" title="Xóa"><i class="fas fa-trash"></i></button>`;
-    }
+      let actionBtns = "";
 
-    let roleBadge =
-      acc.Role === "admin"
-        ? '<span class="status-badge status-broken">Admin</span>'
-        : '<span class="status-badge status-available">User</span>';
+      // Nút đổi quyền: Chỉ hiện nếu không phải tài khoản admin gốc (để bảo vệ)
+      if (!isSuperAdmin) {
+        actionBtns += `<button class="btn btn-warning btn-sm" style="margin-right: 6px; color: white;" onclick="openRoleModal('${acc.Username}', '${acc.Role}')" title="Phân quyền"><i class="fas fa-user-cog"></i></button>`;
+      }
 
-    /* --- XỬ LÝ HIỂN THỊ MẬT KHẨU --- */
-    let passwordHtml = "";
-    if (acc.MatKhauGoc) {
-      // Tạo ID riêng cho mỗi dòng để JS biết cần mở dòng nào
-      const inputId = `pass-input-${index}`;
+      // Nút xóa: Không cho tự xóa mình và không xóa admin gốc
+      if (!isMe && !isSuperAdmin) {
+        actionBtns += `<button class="btn btn-danger btn-sm" onclick="deleteAccount('${acc.Username}')" title="Xóa"><i class="fas fa-trash"></i></button>`;
+      }
 
-      // Dùng input type="password" để mặc định ẩn (hiện chấm tròn)
-      // Thêm style trực tiếp (inline-css) để bạn không cần sửa file .css
-      passwordHtml = `
+      let roleBadge =
+        acc.Role === "admin"
+          ? '<span class="status-badge status-broken">Admin</span>'
+          : '<span class="status-badge status-available">User</span>';
+
+      /* --- XỬ LÝ HIỂN THỊ MẬT KHẨU --- */
+      let passwordHtml = "";
+      if (acc.MatKhauGoc) {
+        // Tạo ID riêng cho mỗi dòng để JS biết cần mở dòng nào
+        const inputId = `pass-input-${index}`;
+
+        // Dùng input type="password" để mặc định ẩn (hiện chấm tròn)
+        // Thêm style trực tiếp (inline-css) để bạn không cần sửa file .css
+        passwordHtml = `
         <div class="password-wrapper">
             <input type="password" 
                    value="${acc.MatKhauGoc}" 
@@ -3135,14 +3691,14 @@ async function loadAccounts() {
             </i>
         </div>
       `;
-    } else {
-      // Tài khoản cũ không có mật khẩu gốc
-      passwordHtml =
-        '<span style="color:#aaa; font-style:italic; font-size: 0.9em;">(Đã mã hóa)</span>';
-    }
+      } else {
+        // Tài khoản cũ không có mật khẩu gốc
+        passwordHtml =
+          '<span style="color:#aaa; font-style:italic; font-size: 0.9em;">(Đã mã hóa)</span>';
+      }
 
-    /* --- RENDER HTML (Lưu ý: Đã chỉnh lại thứ tự cột cho khớp tiêu đề) --- */
-    tbody.innerHTML += `
+      /* --- RENDER HTML (Lưu ý: Đã chỉnh lại thứ tự cột cho khớp tiêu đề) --- */
+      return `
       <tr>
         <td>${acc.Username}</td>
         <td>${acc.DisplayName || ""}</td>
@@ -3154,12 +3710,15 @@ async function loadAccounts() {
         
         <td style="text-align:center">
             <div class="action-btns" style="justify-content:center">
-                ${deleteBtn}
+                ${actionBtns}
             </div>
         </td>
       </tr>
     `;
-  });
+    })
+    .join("");
+
+  tbody.innerHTML = htmlRows;
 }
 
 // 5. Hàm xử lý bật/tắt hiển thị mật khẩu (MỚI)
@@ -3209,21 +3768,24 @@ window.toggleTablePassword = toggleTablePassword; // Đừng quên dòng này
    ======================================================= */
 
 // 1. Hàm đếm số lượng thiết bị cho từng trạng thái
-function updateDeviceStatusCounts() {
-  if (!devices) return;
+function updateDeviceStatusCounts(customList = null) {
+  const listToCount = customList || devices;
+  if (!listToCount) return;
 
   // Đếm số lượng
-  const allCount = devices.length;
-  const availableCount = devices.filter(
+  const allCount = listToCount.length;
+  const availableCount = listToCount.filter(
     (d) => d.Trangthai === "Sẵn sàng",
   ).length;
-  const inUseCount = devices.filter(
+  const inUseCount = listToCount.filter(
     (d) => d.Trangthai === "Đang sử dụng",
   ).length;
-  const maintenanceCount = devices.filter(
+  const maintenanceCount = listToCount.filter(
     (d) => d.Trangthai === "Bảo Hành",
   ).length;
-  const brokenCount = devices.filter((d) => d.Trangthai === "Hư Hỏng").length;
+  const brokenCount = listToCount.filter(
+    (d) => d.Trangthai === "Hư Hỏng",
+  ).length;
 
   // Cập nhật lên giao diện HTML
   const setTxt = (id, val) => {
@@ -3266,11 +3828,14 @@ window.filterDeviceByTab = filterDeviceByTab;
    ========================================= */
 
 // 1. Cập nhật số liệu trên Tabs User
-function updateUserStats() {
-  if (!users) return;
-  const total = users.length;
-  const inUse = users.filter((u) => u.Trangthai === "Đang sử dụng").length;
-  const empty = users.filter(
+function updateUserStats(customList = null) {
+  const listToCount = customList || users;
+  if (!listToCount) return;
+  const total = listToCount.length;
+  const inUse = listToCount.filter(
+    (u) => u.Trangthai === "Đang sử dụng",
+  ).length;
+  const empty = listToCount.filter(
     (u) => !u.Trangthai || u.Trangthai === "Chưa cấp",
   ).length;
 
@@ -3301,7 +3866,7 @@ function filterUserByTab(status) {
 window.filterUserByTab = filterUserByTab;
 
 // 3. Hàm Lọc và Render User (Tương tự Device)
-function applyUserFiltersAndRender() {
+function getBaseFilteredUsers() {
   let filtered = users;
 
   // Lọc theo Search
@@ -3322,6 +3887,17 @@ function applyUserFiltersAndRender() {
   if (dept) {
     filtered = filtered.filter((u) => u.Phongban === dept);
   }
+  return filtered;
+}
+
+function applyUserFiltersAndRender() {
+  // --- Cập nhật URL State ---
+  updateUrlParams();
+
+  const baseFiltered = getBaseFilteredUsers();
+  updateUserStats(baseFiltered);
+
+  let filtered = baseFiltered;
 
   // Lọc theo Tab Trạng thái
   if (currentUserTabStatus) {
@@ -3335,9 +3911,10 @@ function applyUserFiltersAndRender() {
   }
 
   // [CHÈN DÒNG NÀY VÀO TRƯỚC sortData HOẶC TRƯỚC renderUsersTable]
-  updateUserCountLabel(filtered.length, users.length);
+  updateUserCountLabel(filtered.length, baseFiltered.length);
 
   // Sắp xếp
+  filtered = [...filtered];
   sortData(filtered, userSort);
 
   // Phân trang
@@ -3363,3 +3940,66 @@ function applyUserFiltersAndRender() {
     },
   );
 }
+/* =======================================================
+   LOGIC PHÂN QUYỀN TÀI KHOẢN (THÊM MỚI)
+   ======================================================= */
+
+function openRoleModal(username, currentRole) {
+  const modal = document.getElementById("roleModal");
+  if (modal) {
+    document.getElementById("editRoleUsername").value = username;
+    document.getElementById("editRoleDisplay").value = username; // Hiện tên cho dễ nhìn
+    document.getElementById("newRoleSelect").value = currentRole; // Set giá trị mặc định theo quyền hiện tại
+    modal.style.display = "flex";
+  }
+}
+
+function closeRoleModal() {
+  const modal = document.getElementById("roleModal");
+  if (modal) modal.style.display = "none";
+}
+
+const roleFormElement = document.getElementById("roleForm");
+if (roleFormElement) {
+  roleFormElement.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const username = document.getElementById("editRoleUsername").value;
+    const newRole = document.getElementById("newRoleSelect").value;
+
+    // Gọi API đã có sẵn ở file index.js
+    const res = await fetchJson(`/api/accounts/${username}/role`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ role: newRole }),
+    });
+
+    if (res) {
+      showAlert("Đã phân chia lại quyền hạn thành công ✔️", true);
+      closeRoleModal();
+      loadAccounts(); // Refresh lại bảng
+
+      // Tính năng phụ UX: Nếu Admin đang đăng nhập tự hạ quyền của chính mình xuống User
+      if (username === window.currentUsername && newRole === "user") {
+        showAlert(
+          "Bạn vừa hạ quyền của chính mình. Hệ thống sẽ đăng xuất để cập nhật...",
+          false,
+        );
+        setTimeout(() => {
+          document.getElementById("logoutBtn").click();
+        }, 2000);
+      }
+    }
+  });
+}
+
+// Gắn hàm vào window để HTML gọi được (do chúng ta dùng onclick)
+window.openRoleModal = openRoleModal;
+window.closeRoleModal = closeRoleModal;
+
+// Đóng modal đổi quyền khi click ra ngoài vùng xám
+window.addEventListener("click", (e) => {
+  const roleModal = document.getElementById("roleModal");
+  if (e.target === roleModal) {
+    roleModal.style.display = "none";
+  }
+});

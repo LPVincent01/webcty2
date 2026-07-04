@@ -15,7 +15,9 @@ const HOST = "0.0.0.0"; // Cho phép truy cập từ tất cả IP trong LAN
 const config = {
   user: process.env.DB_USER || "sa",
   password: process.env.DB_PASSWORD || "Abc@123456!",
-  server: process.env.DB_SERVER || "LAPTOP-M8N7CHUK",
+  //server: process.env.DB_SERVER || "127.0.0.1",
+  // Thay 127.0.0.1 thành IP của Server để dù chạy ở Laptop vẫn trỏ về Server
+  server: process.env.DB_SERVER || "192.168.11.205",
   database: process.env.DB_NAME || "QuanLyThietBi",
   options: {
     encrypt: false,
@@ -35,6 +37,8 @@ const ALLOWED_ORIGINS = [
   "http://127.0.0.1:5500",
   "http://192.168.11.205:3000",
   "http://192.168.11.205:5500",
+  "http://192.168.11.207:3000", // Thêm IP Card mạng 1 của Server
+  "http://192.168.10.207:3000", // Thêm IP Card mạng 2 của Server
   // IP WAN Viettel
   "http://115.79.138.139:3000",
   "http://115.79.138.139:5500", // nếu front-end chạy port 5500
@@ -44,10 +48,7 @@ const ALLOWED_ORIGINS = [
 
 app.use(
   cors({
-    origin: (origin, cb) => {
-      if (!origin || ALLOWED_ORIGINS.includes(origin)) return cb(null, true);
-      return cb(new Error("Not allowed by CORS: " + origin));
-    },
+    origin: "*", // Cho phép mọi IP quét mã không bị lỗi CORS
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
     credentials: false,
@@ -161,7 +162,6 @@ app.get("/api/accounts", authenticate, authorizeAdmin, async (req, res) => {
   }
 });
 
-// [BẮT ĐẦU ĐOẠN SỬA]
 // 2. Tạo tài khoản mới (Có mã hóa mật khẩu + Lưu mật khẩu gốc)
 app.post("/api/accounts", authenticate, authorizeAdmin, async (req, res) => {
   const { username, password, role, displayName } = req.body;
@@ -186,11 +186,10 @@ app.post("/api/accounts", authenticate, authorizeAdmin, async (req, res) => {
     // Mã hóa mật khẩu
     let passwordToSave = password;
     try {
-      const bcrypt = require("bcryptjs");
       const salt = await bcrypt.genSalt(10);
       passwordToSave = await bcrypt.hash(password, salt);
     } catch (e) {
-      console.warn("Chưa cài bcryptjs, lưu mật khẩu dạng thô.");
+      console.warn("Lỗi mã hóa bcrypt, lưu mật khẩu dạng thô.", e);
     }
 
     // LƯU Ý: Thêm @MatKhauGoc vào câu lệnh INSERT
@@ -210,7 +209,6 @@ app.post("/api/accounts", authenticate, authorizeAdmin, async (req, res) => {
     handleSqlError(res, err);
   }
 });
-// [KẾT THÚC ĐOẠN SỬA]
 
 // Xóa tài khoản
 app.delete(
@@ -227,6 +225,42 @@ app.delete(
         .input("Username", sql.VarChar, req.params.username)
         .query("DELETE FROM dbo.TAIKHOAN WHERE Username = @Username");
       res.send("Xóa tài khoản thành công");
+    } catch (err) {
+      handleSqlError(res, err);
+    }
+  },
+);
+
+// Cập nhật quyền tài khoản (Admin Only)
+app.put(
+  "/api/accounts/:username/role",
+  authenticate,
+  authorizeAdmin,
+  async (req, res) => {
+    const { username } = req.params;
+    const { role } = req.body;
+
+    // Kiểm tra quyền hợp lệ
+    if (!role || (role !== "admin" && role !== "user")) {
+      return res.status(400).send("Quyền không hợp lệ");
+    }
+
+    // Không cho phép đổi quyền của tài khoản admin gốc
+    if (username === "admin") {
+      return res.status(400).send("Không thể thay đổi quyền của Super Admin");
+    }
+
+    try {
+      const pool = await poolPromise;
+      await pool
+        .request()
+        .input("Username", sql.VarChar, username)
+        .input("Role", sql.VarChar, role)
+        .query(
+          "UPDATE dbo.TAIKHOAN SET Role = @Role WHERE Username = @Username",
+        );
+
+      res.send("Cập nhật quyền thành công");
     } catch (err) {
       handleSqlError(res, err);
     }
@@ -355,8 +389,7 @@ const poolPromise = new sql.ConnectionPool(config)
       )
       .then(() => console.log("✅ Unique index THIETBI(SerialSN) sẵn sàng"))
       .catch((e) =>
-        console.warn(
-          "⚠️ Không thể tạo unique index SerialSN:",
+        console.warn("⚠️ Không thể tạo unique index SerialSN:",
           e?.message || e,
         ),
       );
@@ -381,6 +414,36 @@ const poolPromise = new sql.ConnectionPool(config)
         console.warn("⚠️ Ensure Last* columns lỗi:", e?.message || e),
       );
 
+    // ====== Migration: Đổi tên TenDot thành Thoigiankiemke ======
+    try {
+      await pool.request().query(`
+        IF COL_LENGTH('dbo.DOTKIEMKE', 'TenDot') IS NOT NULL
+        BEGIN
+          EXEC sp_rename 'dbo.DOTKIEMKE.TenDot', 'Thoigiankiemke', 'COLUMN';
+        END
+
+        -- Migration: Bỏ cột HinhAnhThucTe của Kiemketaisan
+        IF COL_LENGTH('dbo.Kiemketaisan', 'HinhAnhThucTe') IS NOT NULL
+        BEGIN
+          ALTER TABLE dbo.Kiemketaisan DROP COLUMN HinhAnhThucTe;
+        END
+
+        -- Data Migration: Cập nhật ảnh từ KIEMKECHITIET sang THIETBI
+        UPDATE T
+        SET T.HinhAnhThucTe = K.HinhAnhThucTe
+        FROM dbo.THIETBI T
+        INNER JOIN (
+            SELECT MaTaiSan, HinhAnhThucTe,
+                   ROW_NUMBER() OVER(PARTITION BY MaTaiSan ORDER BY ThoiGianQuet DESC) as rn
+            FROM dbo.KIEMKECHITIET
+            WHERE HinhAnhThucTe IS NOT NULL
+        ) K ON T.MaTaiSan = K.MaTaiSan AND K.rn = 1
+        WHERE T.HinhAnhThucTe IS NULL;
+      `);
+    } catch(e) {
+      console.warn("⚠️ Không thể đổi tên cột TenDot:", e?.message);
+    }
+
     // ====== Tạo bảng đợt kiểm kê + chi tiết kiểm kê (nếu chưa có) ======
     await pool
       .request()
@@ -394,7 +457,7 @@ const poolPromise = new sql.ConnectionPool(config)
         BEGIN
           CREATE TABLE dbo.DOTKIEMKE (
             DotID INT IDENTITY(1,1) PRIMARY KEY,
-            TenDot NVARCHAR(100) NOT NULL,
+            Thoigiankiemke NVARCHAR(100) NOT NULL,
             NgayBatDau DATE NULL,
             NgayKetThuc DATE NULL,
             GhiChu NVARCHAR(255) NULL
@@ -404,8 +467,8 @@ const poolPromise = new sql.ConnectionPool(config)
         -- Tạo 1 đợt kiểm kê mặc định nếu bảng rỗng
         IF NOT EXISTS (SELECT 1 FROM dbo.DOTKIEMKE)
         BEGIN
-          INSERT INTO dbo.DOTKIEMKE (TenDot, NgayBatDau, GhiChu)
-          VALUES (N'Kiểm kê mặc định', CONVERT(date, GETDATE()), N'Tạo tự động bởi backend');
+          INSERT INTO dbo.DOTKIEMKE (Thoigiankiemke, NgayBatDau, GhiChu)
+          VALUES (CONVERT(varchar(7), GETDATE(), 120), CONVERT(date, GETDATE()), N'Tạo tự động bởi backend');
         END;
 
         -- Bảng chi tiết kiểm kê
@@ -417,7 +480,7 @@ const poolPromise = new sql.ConnectionPool(config)
           CREATE TABLE dbo.KIEMKECHITIET (
             ID INT IDENTITY(1,1) PRIMARY KEY,
             DotID INT NOT NULL,
-            MaThietBi VARCHAR(50) NOT NULL,
+            MaTaiSan VARCHAR(50) NOT NULL,
             TrangThaiThucTe NVARCHAR(50) NULL,
             ViTriThucTe NVARCHAR(100) NULL,
             NhanVienKiemKe NVARCHAR(100) NULL,
@@ -430,12 +493,35 @@ const poolPromise = new sql.ConnectionPool(config)
               REFERENCES dbo.DOTKIEMKE(DotID);
 
           ALTER TABLE dbo.KIEMKECHITIET
-            ADD CONSTRAINT FK_KIEMKE_THIETBI FOREIGN KEY (MaThietBi)
-              REFERENCES dbo.THIETBI(MaThietBi);
+            ADD CONSTRAINT FK_KIEMKE_THIETBI FOREIGN KEY (MaTaiSan)
+              REFERENCES dbo.THIETBI(MaTaiSan);
 
           -- Mỗi thiết bị chỉ có 1 dòng / 1 đợt
           CREATE UNIQUE INDEX UX_KIEMKE_Dot_ThietBi
-            ON dbo.KIEMKECHITIET(DotID, MaThietBi);
+            ON dbo.KIEMKECHITIET(DotID, MaTaiSan);
+            
+          -- Index tối ưu truy vấn lấy ảnh mới nhất
+          CREATE INDEX IX_KIEMKE_HinhAnh 
+            ON dbo.KIEMKECHITIET(MaTaiSan, DotID DESC, ThoiGianQuet DESC) 
+            INCLUDE (HinhAnhThucTe);
+        END;
+
+        -- Bảng Kiemketaisan (mới thêm theo yêu cầu)
+        IF NOT EXISTS (
+          SELECT * FROM sys.tables 
+          WHERE name = 'Kiemketaisan' AND schema_id = SCHEMA_ID('dbo')
+        )
+        BEGIN
+          CREATE TABLE dbo.Kiemketaisan (
+            ID INT IDENTITY(1,1) PRIMARY KEY,
+            Dotkiemke INT NOT NULL,
+            MaTaiSan VARCHAR(50) NOT NULL,
+            NhanVienKiemKe NVARCHAR(100) NULL,
+            ThoiGianQuet DATETIME DEFAULT GETDATE(),
+            TrangThaiThucTe NVARCHAR(50) NULL,
+            ViTriThucTe NVARCHAR(100) NULL,
+            Ghichu NVARCHAR(255) NULL
+          );
         END;
 
         -- Thêm cột hình ảnh nếu chưa có
@@ -511,7 +597,7 @@ async function runTx(work) {
   } catch (e) {
     try {
       await tx.rollback();
-    } catch (_) {}
+    } catch (_) { }
     throw e;
   }
 }
@@ -547,19 +633,16 @@ app.get("/api/devices", authenticate, async (_req, res) => {
     const result = await pool.request().query(`
       SELECT
         t.*,
-        -- [SỬA LẠI DÒNG NÀY] Ưu tiên lấy ảnh trong bảng THIETBI (ảnh mới upload)
-        -- Nếu không có thì mới lấy ảnh từ kiểm kê (kk)
-        -- Đổi tên thành HinhAnhHienThi để không bị trùng
-COALESCE(t.HinhAnhThucTe, kk.HinhAnhThucTe) as HinhAnhHienThi
+        COALESCE(t.HinhAnhThucTe, kk.HinhAnhThucTe) as HinhAnhHienThi
       FROM dbo.THIETBI t
       LEFT JOIN (
         SELECT
-          MaThietBi, HinhAnhThucTe,
-          ROW_NUMBER() OVER(PARTITION BY MaThietBi ORDER BY DotID DESC, ThoiGianQuet DESC) as rn
+          MaTaiSan, HinhAnhThucTe,
+          ROW_NUMBER() OVER(PARTITION BY MaTaiSan ORDER BY DotID DESC, ThoiGianQuet DESC) as rn
         FROM dbo.KIEMKECHITIET
         WHERE HinhAnhThucTe IS NOT NULL
-      ) kk ON t.MaThietBi = kk.MaThietBi AND kk.rn = 1
-      ORDER BY t.MaThietBi
+      ) kk ON t.MaTaiSan = kk.MaTaiSan AND kk.rn = 1
+      ORDER BY t.MaTaiSan
     `);
     res.json(result.recordset);
   } catch (err) {
@@ -573,6 +656,7 @@ app.post(
   authorizeAdmin,
   async (req, res) => {
     const items = req.body || [];
+    require('fs').writeFileSync('C:/Laptrinhweb/webcty2/scratch/payload.json', JSON.stringify(items, null, 2));
     if (!Array.isArray(items) || items.length === 0)
       return res.status(400).send("Không có dữ liệu");
 
@@ -580,10 +664,17 @@ app.post(
       const pool = await poolPromise;
       const insertPromises = items.map((d) => {
         const req = pool.request();
-        req.input("MaThietBi", sql.VarChar(50), d.MaThietBi);
-        req.input("TenThietBi", sql.NVarChar(255), d.TenThietBi || null);
-        req.input("LoaiThietBi", sql.NVarChar(100), d.LoaiThietBi || null);
+
+        // FIX: Nếu TenTaiSan rỗng, lấy chính MaTaiSan đắp vào, không cho phép null
+        const safeTenTaiSan = d.TenTaiSan ? d.TenTaiSan : d.MaTaiSan;
+        // FIX: Nếu LoaiTaiSan rỗng, để chuỗi rỗng hoặc "Khác"
+        const safeLoaiTaiSan = d.LoaiTaiSan ? d.LoaiTaiSan : "Khác";
+
+        req.input("MaTaiSan", sql.VarChar(50), d.MaTaiSan);
+        req.input("TenTaiSan", sql.NVarChar(255), safeTenTaiSan);
+        req.input("LoaiTaiSan", sql.NVarChar(100), safeLoaiTaiSan);
         req.input("SerialSN", sql.VarChar(100), normalizeSerialSN(d.SerialSN));
+
         let parsedDate = null;
         if (d.NgayNhap) {
           const tempDate = new Date(d.NgayNhap);
@@ -591,17 +682,34 @@ app.post(
             parsedDate = tempDate;
           }
         }
-        req.input("NgayNhap", sql.Date, parsedDate);
+        // FIX: Nếu NgayNhap bị lỗi, lấy ngày hiện tại thay vì null
+        req.input("NgayNhap", sql.Date, parsedDate || new Date());
 
         req.input("Trangthai", sql.NVarChar(50), d.Trangthai || "Sẵn sàng");
         req.input("Nguoisudung", sql.NVarChar(100), d.Nguoisudung || null);
         req.input("Vitri", sql.NVarChar(100), d.Vitri || null);
-
         return req.query(`
-  INSERT INTO dbo.THIETBI
-    (MaThietBi, TenThietBi, LoaiThietBi, SerialSN, NgayNhap, Trangthai, Nguoisudung, Vitri)
-  VALUES
-    (@MaThietBi, @TenThietBi, @LoaiThietBi, @SerialSN, @NgayNhap, @Trangthai, @Nguoisudung, @Vitri);
+  IF EXISTS (SELECT 1 FROM dbo.THIETBI WHERE MaTaiSan = @MaTaiSan)
+  BEGIN
+    -- Nếu đã tồn tại -> CẬP NHẬT THÔNG TIN MỚI TỪ EXCEL
+    UPDATE dbo.THIETBI
+    SET TenTaiSan  = @TenTaiSan,
+        LoaiTaiSan = @LoaiTaiSan,
+        SerialSN    = @SerialSN,
+        NgayNhap    = @NgayNhap,
+        Trangthai   = @Trangthai,
+        Nguoisudung = @Nguoisudung,
+        Vitri       = @Vitri
+    WHERE MaTaiSan = @MaTaiSan
+  END
+  ELSE
+  BEGIN
+    -- Nếu chưa tồn tại -> THÊM MỚI HOÀN TOÀN
+    INSERT INTO dbo.THIETBI
+      (MaTaiSan, TenTaiSan, LoaiTaiSan, SerialSN, NgayNhap, Trangthai, Nguoisudung, Vitri)
+    VALUES
+      (@MaTaiSan, @TenTaiSan, @LoaiTaiSan, @SerialSN, @NgayNhap, @Trangthai, @Nguoisudung, @Vitri)
+  END
 `);
       });
 
@@ -622,9 +730,9 @@ app.get("/api/purchases", authenticate, async (_req, res) => {
     const result = await pool.request().query(`
       SELECT
         PurchaseId,
-        MaThietBi,
-        TenThietBi,
-        LoaiThietBi,
+        MaTaiSan,
+        TenTaiSan,
+        LoaiTaiSan,
         NgayNhap,
         ThanhTien,
         NguonMua,
@@ -634,7 +742,7 @@ app.get("/api/purchases", authenticate, async (_req, res) => {
         LastUserId,
         LastAssignedDate
       FROM dbo.Purchase
-      ORDER BY MaThietBi, NgayNhap DESC, PurchaseId DESC
+      ORDER BY MaTaiSan, NgayNhap DESC, PurchaseId DESC
     `);
     res.json(result.recordset);
   } catch (err) {
@@ -644,7 +752,7 @@ app.get("/api/purchases", authenticate, async (_req, res) => {
 // Thêm 1 bản ghi mua hàng
 app.post("/api/purchases", authenticate, async (req, res) => {
   const {
-    MaThietBi,
+    MaTaiSan,
     NgayNhap,
     ThanhTien,
     NguonMua,
@@ -653,32 +761,32 @@ app.post("/api/purchases", authenticate, async (req, res) => {
     LastAssignedDate,
   } = req.body || {};
 
-  if (!MaThietBi || !NgayNhap) {
-    return res.status(400).send("MaThietBi và NgayNhap là bắt buộc");
+  if (!MaTaiSan || !NgayNhap) {
+    return res.status(400).send("MaTaiSan và NgayNhap là bắt buộc");
   }
 
   try {
     const pool = await poolPromise;
 
-    // Lấy thông tin thiết bị để tự điền TenThietBi, LoaiThietBi
+    // Lấy thông tin thiết bị để tự điền TenTaiSan, LoaiTaiSan
     const devResult = await pool
       .request()
-      .input("MaThietBi", sql.VarChar(50), MaThietBi)
+      .input("MaTaiSan", sql.VarChar(50), MaTaiSan)
       .query(
-        "SELECT TenThietBi, LoaiThietBi FROM dbo.THIETBI WHERE MaThietBi=@MaThietBi",
+        "SELECT TenTaiSan, LoaiTaiSan FROM dbo.THIETBI WHERE MaTaiSan=@MaTaiSan",
       );
 
     if (!devResult.recordset.length) {
-      return res.status(400).send("Mã thiết bị không tồn tại trong THIETBI");
+      return res.status(400).send("Mã tài sản không tồn tại trong THIETBI");
     }
 
-    const { TenThietBi, LoaiThietBi } = devResult.recordset[0];
+    const { TenTaiSan, LoaiTaiSan } = devResult.recordset[0];
 
     const insertReq = pool
       .request()
-      .input("MaThietBi", sql.VarChar(50), MaThietBi)
-      .input("TenThietBi", sql.NVarChar(255), TenThietBi || null)
-      .input("LoaiThietBi", sql.NVarChar(100), LoaiThietBi || null)
+      .input("MaTaiSan", sql.VarChar(50), MaTaiSan)
+      .input("TenTaiSan", sql.NVarChar(255), TenTaiSan || null)
+      .input("LoaiTaiSan", sql.NVarChar(100), LoaiTaiSan || null)
       .input("NgayNhap", sql.Date, NgayNhap)
       .input("ThanhTien", sql.Decimal(18, 2), ThanhTien ?? null)
       .input("NguonMua", sql.NVarChar(50), NguonMua || null)
@@ -688,10 +796,10 @@ app.post("/api/purchases", authenticate, async (req, res) => {
 
     const result = await insertReq.query(`
       INSERT INTO dbo.Purchase
-        (MaThietBi, TenThietBi, LoaiThietBi, NgayNhap, ThanhTien, NguonMua,
+        (MaTaiSan, TenTaiSan, LoaiTaiSan, NgayNhap, ThanhTien, NguonMua,
          LastUserName, LastUserId, LastAssignedDate, CreatedAt, UpdatedAt)
       VALUES
-        (@MaThietBi, @TenThietBi, @LoaiThietBi, @NgayNhap, @ThanhTien, @NguonMua,
+        (@MaTaiSan, @TenTaiSan, @LoaiTaiSan, @NgayNhap, @ThanhTien, @NguonMua,
          @LastUserName, @LastUserId, @LastAssignedDate, GETDATE(), GETDATE());
       SELECT TOP 1 *
       FROM dbo.Purchase
@@ -716,7 +824,7 @@ app.put(
     }
 
     const {
-      MaThietBi,
+      MaTaiSan,
       NgayNhap,
       ThanhTien,
       NguonMua,
@@ -725,8 +833,8 @@ app.put(
       LastAssignedDate,
     } = req.body || {};
 
-    if (!MaThietBi || !NgayNhap) {
-      return res.status(400).send("MaThietBi và NgayNhap là bắt buộc");
+    if (!MaTaiSan || !NgayNhap) {
+      return res.status(400).send("MaTaiSan và NgayNhap là bắt buộc");
     }
 
     try {
@@ -735,23 +843,23 @@ app.put(
       // Lấy thông tin thiết bị
       const devResult = await pool
         .request()
-        .input("MaThietBi", sql.VarChar(50), MaThietBi)
+        .input("MaTaiSan", sql.VarChar(50), MaTaiSan)
         .query(
-          "SELECT TenThietBi, LoaiThietBi FROM dbo.THIETBI WHERE MaThietBi=@MaThietBi",
+          "SELECT TenTaiSan, LoaiTaiSan FROM dbo.THIETBI WHERE MaTaiSan=@MaTaiSan",
         );
 
       if (!devResult.recordset.length) {
-        return res.status(400).send("Mã thiết bị không tồn tại trong THIETBI");
+        return res.status(400).send("Mã tài sản không tồn tại trong THIETBI");
       }
 
-      const { TenThietBi, LoaiThietBi } = devResult.recordset[0];
+      const { TenTaiSan, LoaiTaiSan } = devResult.recordset[0];
 
       const updateReq = pool
         .request()
         .input("PurchaseId", sql.Int, purchaseId)
-        .input("MaThietBi", sql.VarChar(50), MaThietBi)
-        .input("TenThietBi", sql.NVarChar(255), TenThietBi || null)
-        .input("LoaiThietBi", sql.NVarChar(100), LoaiThietBi || null)
+        .input("MaTaiSan", sql.VarChar(50), MaTaiSan)
+        .input("TenTaiSan", sql.NVarChar(255), TenTaiSan || null)
+        .input("LoaiTaiSan", sql.NVarChar(100), LoaiTaiSan || null)
         .input("NgayNhap", sql.Date, NgayNhap)
         .input("ThanhTien", sql.Decimal(18, 2), ThanhTien ?? null)
         .input("NguonMua", sql.NVarChar(50), NguonMua || null)
@@ -762,9 +870,9 @@ app.put(
       const result = await updateReq.query(`
       UPDATE dbo.Purchase
       SET
-        MaThietBi      = @MaThietBi,
-        TenThietBi     = @TenThietBi,
-        LoaiThietBi    = @LoaiThietBi,
+        MaTaiSan      = @MaTaiSan,
+        TenTaiSan     = @TenTaiSan,
+        LoaiTaiSan    = @LoaiTaiSan,
         NgayNhap       = @NgayNhap,
         ThanhTien      = @ThanhTien,
         NguonMua       = @NguonMua,
@@ -835,11 +943,11 @@ const storage = multer.diskStorage({
     cb(null, uploadDir); // Lưu file vào thư mục 'public/upload hình ảnh'
   },
   filename: function (req, file, cb) {
-    // Tạo tên file duy nhất: MaThietBi-DotID-Timestamp.jpg
-    const maThietBi = req.body.maThietBi || "unknown";
+    // Tạo tên file duy nhất: MaTaiSan-DotID-Timestamp.jpg
+    const maTaiSan = req.body.maTaiSan || "unknown";
     const dotId = req.body.dotId || "1";
     const uniqueSuffix = Date.now();
-    const newFilename = `${maThietBi}-dot${dotId}-${uniqueSuffix}${path.extname(
+    const newFilename = `${maTaiSan}-dot${dotId}-${uniqueSuffix}${path.extname(
       file.originalname,
     )}`;
     cb(null, newFilename);
@@ -872,8 +980,8 @@ app.post("/public/upload-image", (req, res) => {
         .json({ message: "Không có tệp nào được tải lên." });
     }
 
-    const { maThietBi, dotId, nhanVien } = req.body;
-    if (!maThietBi || !dotId) {
+    const { maTaiSan, dotId, nhanVien } = req.body;
+    if (!maTaiSan || !dotId) {
       return res
         .status(400)
         .json({ message: "Thiếu thông tin Mã Thiết Bị hoặc Đợt Kiểm Kê." });
@@ -886,23 +994,16 @@ app.post("/public/upload-image", (req, res) => {
       const pool = await poolPromise;
       await pool
         .request()
-        .input("MaThietBi", sql.VarChar, maThietBi)
+        .input("MaTaiSan", sql.VarChar, maTaiSan)
         .input("DotID", sql.Int, dotId)
         .input("HinhAnh", sql.NVarChar, imagePath)
         .input("NhanVien", sql.NVarChar, nhanVien || "N/A") // Input mới
         .query(
           `
-          -- Cập nhật đường dẫn ảnh vào bản ghi kiểm kê đã có
-          UPDATE KIEMKECHITIET
+          -- Cập nhật đường dẫn ảnh trực tiếp vào bảng THIETBI
+          UPDATE THIETBI
           SET HinhAnhThucTe = @HinhAnh
-          WHERE MaThietBi = @MaThietBi AND DotID = @DotID;
-
-          -- Nếu chưa có bản ghi kiểm kê, tạo mới với thông tin ảnh
-          IF @@ROWCOUNT = 0
-          BEGIN
-            INSERT INTO KIEMKECHITIET (DotID, MaThietBi, HinhAnhThucTe, NhanVienKiemKe)
-            VALUES (@DotID, @MaThietBi, @HinhAnh, 'N/A');
-          END
+          WHERE MaTaiSan = @MaTaiSan;
         `,
         );
 
@@ -927,9 +1028,9 @@ app.post("/public/upload-image", (req, res) => {
 // Thêm thiết bị
 app.post("/api/devices", authenticate, async (req, res) => {
   const {
-    MaThietBi,
-    TenThietBi,
-    LoaiThietBi,
+    MaTaiSan,
+    TenTaiSan,
+    LoaiTaiSan,
     SerialSN,
     NgayNhap,
     Trangthai,
@@ -938,7 +1039,7 @@ app.post("/api/devices", authenticate, async (req, res) => {
     Vitri,
   } = req.body || {};
 
-  if (!MaThietBi || !TenThietBi) {
+  if (!MaTaiSan || !TenTaiSan) {
     return res.status(400).send("Thiếu mã hoặc tên thiết bị");
   }
 
@@ -966,9 +1067,9 @@ app.post("/api/devices", authenticate, async (req, res) => {
       }
 
       await new sql.Request(tx)
-        .input("MaThietBi", sql.VarChar, MaThietBi)
-        .input("TenThietBi", sql.NVarChar, TenThietBi)
-        .input("LoaiThietBi", sql.NVarChar, LoaiThietBi || "")
+        .input("MaTaiSan", sql.VarChar, MaTaiSan)
+        .input("TenTaiSan", sql.NVarChar, TenTaiSan)
+        .input("LoaiTaiSan", sql.NVarChar, LoaiTaiSan || "")
         .input("SerialSN", sql.VarChar(100), normalizeSerialSN(SerialSN) || "")
         .input("NgayNhap", sql.Date, NgayNhap || null)
         .input("Trangthai", sql.NVarChar, state)
@@ -980,28 +1081,28 @@ app.post("/api/devices", authenticate, async (req, res) => {
         .input("Vitri", sql.NVarChar, Vitri || null)
         .query(
           `INSERT INTO dbo.THIETBI
-           (MaThietBi, TenThietBi, LoaiThietBi, SerialSN, NgayNhap, Trangthai, Nguoisudung, Vitri)
-           VALUES (@MaThietBi, @TenThietBi, @LoaiThietBi, @SerialSN, @NgayNhap, @Trangthai, @Nguoisudung, @Vitri)`,
+           (MaTaiSan, TenTaiSan, LoaiTaiSan, SerialSN, NgayNhap, Trangthai, Nguoisudung, Vitri)
+           VALUES (@MaTaiSan, @TenTaiSan, @LoaiTaiSan, @SerialSN, @NgayNhap, @Trangthai, @Nguoisudung, @Vitri)`,
         );
 
       if (assignedUser) {
         // Giải phóng thiết bị cũ nếu có
         if (
           assignedUser.Thietbisudung &&
-          assignedUser.Thietbisudung !== MaThietBi
+          assignedUser.Thietbisudung !== MaTaiSan
         ) {
           await new sql.Request(tx)
             .input("PrevDev", sql.VarChar, assignedUser.Thietbisudung)
             .query(
-              "UPDATE dbo.THIETBI SET Trangthai=N'Sẵn sàng', Nguoisudung=NULL WHERE MaThietBi=@PrevDev",
+              "UPDATE dbo.THIETBI SET Trangthai=N'Sẵn sàng', Nguoisudung=NULL WHERE MaTaiSan=@PrevDev",
             );
         }
         await new sql.Request(tx)
           .input("MaNV", sql.VarChar, assignedUser.MaNV)
-          .input("MaThietBi", sql.VarChar, MaThietBi)
+          .input("MaTaiSan", sql.VarChar, MaTaiSan)
           .input("Ngaycap", sql.Date, Ngaycap || null)
           .query(
-            "UPDATE dbo.NHANVIEN SET Thietbisudung=@MaThietBi, Ngaycap = CASE WHEN Ngaycap IS NOT NULL THEN Ngaycap ELSE COALESCE(@Ngaycap, GETDATE()) END, Trangthai=N'Đang sử dụng' WHERE MaNV=@MaNV",
+            "UPDATE dbo.NHANVIEN SET Thietbisudung=@MaTaiSan, Ngaycap = CASE WHEN Ngaycap IS NOT NULL THEN Ngaycap ELSE COALESCE(@Ngaycap, GETDATE()) END, Trangthai=N'Đang sử dụng' WHERE MaNV=@MaNV",
           );
       }
     });
@@ -1019,8 +1120,8 @@ app.post("/api/devices", authenticate, async (req, res) => {
 app.put("/api/devices/:id", authenticate, upload, async (req, res) => {
   const { id } = req.params;
   let {
-    TenThietBi,
-    LoaiThietBi,
+    TenTaiSan,
+    LoaiTaiSan,
     SerialSN,
     NgayNhap,
     Trangthai,
@@ -1056,8 +1157,8 @@ app.put("/api/devices/:id", authenticate, upload, async (req, res) => {
     // 1. Lấy dữ liệu CŨ của thiết bị (để backup hoặc restore)
     const oldDevRes = await transaction
       .request()
-      .input("MaThietBi", sql.VarChar, id)
-      .query("SELECT * FROM THIETBI WHERE MaThietBi = @MaThietBi");
+      .input("MaTaiSan", sql.VarChar, id)
+      .query("SELECT * FROM THIETBI WHERE MaTaiSan = @MaTaiSan");
 
     const oldDev = oldDevRes.recordset[0] || {};
     let restoreDate = null; // Biến lưu ngày cấp cũ để khôi phục
@@ -1068,9 +1169,9 @@ app.put("/api/devices/:id", authenticate, upload, async (req, res) => {
       // Lấy ngày cấp thực tế từ bảng NHANVIEN
       const empRes = await transaction
         .request()
-        .input("MaThietBi", sql.VarChar, id)
+        .input("MaTaiSan", sql.VarChar, id)
         .query(
-          "SELECT TOP 1 MaNV, HoVaTen, Ngaycap FROM NHANVIEN WHERE Thietbisudung = @MaThietBi",
+          "SELECT TOP 1 MaNV, HoVaTen, Ngaycap FROM NHANVIEN WHERE Thietbisudung = @MaTaiSan",
         );
 
       if (empRes.recordset.length > 0) {
@@ -1078,12 +1179,12 @@ app.put("/api/devices/:id", authenticate, upload, async (req, res) => {
         // Cập nhật cột Last* trong THIETBI để nhớ
         await transaction
           .request()
-          .input("MaThietBi", sql.VarChar, id)
+          .input("MaTaiSan", sql.VarChar, id)
           .input("LastUserId", sql.VarChar, emp.MaNV)
           .input("LastUserName", sql.NVarChar, emp.HoVaTen)
           .input("LastAssignedDate", sql.Date, emp.Ngaycap) // Lưu ngày cấp cũ
           .query(
-            `UPDATE THIETBI SET LastUserId=@LastUserId, LastUserName=@LastUserName, LastAssignedDate=@LastAssignedDate WHERE MaThietBi=@MaThietBi`,
+            `UPDATE THIETBI SET LastUserId=@LastUserId, LastUserName=@LastUserName, LastAssignedDate=@LastAssignedDate WHERE MaTaiSan=@MaTaiSan`,
           );
       }
     }
@@ -1119,9 +1220,9 @@ app.put("/api/devices/:id", authenticate, upload, async (req, res) => {
     // Cập nhật bảng THIETBI
     await transaction
       .request()
-      .input("MaThietBi", sql.VarChar, id)
-      .input("TenThietBi", sql.NVarChar, TenThietBi)
-      .input("LoaiThietBi", sql.NVarChar, LoaiThietBi)
+      .input("MaTaiSan", sql.VarChar, id)
+      .input("TenTaiSan", sql.NVarChar, TenTaiSan)
+      .input("LoaiTaiSan", sql.NVarChar, LoaiTaiSan)
       .input("SerialSN", sql.VarChar, SerialSN)
       .input("NgayNhap", sql.Date, NgayNhap)
       .input("Trangthai", sql.NVarChar, Trangthai)
@@ -1129,15 +1230,15 @@ app.put("/api/devices/:id", authenticate, upload, async (req, res) => {
       .input("Vitri", sql.NVarChar, Vitri)
       .input("HinhAnhThucTe", sql.NVarChar, HinhAnhThucTe).query(`
           UPDATE THIETBI
-          SET TenThietBi = @TenThietBi,
-              LoaiThietBi = @LoaiThietBi,
+          SET TenTaiSan = @TenTaiSan,
+              LoaiTaiSan = @LoaiTaiSan,
               SerialSN = @SerialSN,
               NgayNhap = @NgayNhap,
               Trangthai = @Trangthai,
               Nguoisudung = @Nguoisudung,
               Vitri = @Vitri,
               HinhAnhThucTe = @HinhAnhThucTe
-          WHERE MaThietBi = @MaThietBi
+          WHERE MaTaiSan = @MaTaiSan
         `);
 
     // [BẮT ĐẦU ĐOẠN CODE CẦN THÊM/SỬA] ========================================
@@ -1148,11 +1249,11 @@ app.put("/api/devices/:id", authenticate, upload, async (req, res) => {
     // [FIX] Trừ người dùng MỚI ra (nếu đang gán cho họ), để không bị xoá mất ngày cấp cũ của họ
     await transaction
       .request()
-      .input("MaThietBi", sql.VarChar, id)
+      .input("MaTaiSan", sql.VarChar, id)
       .input("NewUser", sql.NVarChar, Nguoisudung || "").query(`
         UPDATE NHANVIEN 
         SET Thietbisudung = NULL, Ngaycap = NULL, Trangthai = N'Chưa cấp'
-        WHERE Thietbisudung = @MaThietBi
+        WHERE Thietbisudung = @MaTaiSan
           AND (@NewUser = '' OR (HoVaTen <> @NewUser AND MaNV <> @NewUser))
       `);
 
@@ -1161,11 +1262,11 @@ app.put("/api/devices/:id", authenticate, upload, async (req, res) => {
       await transaction
         .request()
         .input("TenNV", sql.NVarChar, Nguoisudung) // Nguoisudung lấy từ form (Frontend gửi lên)
-        .input("MaThietBi", sql.VarChar, id)
+        .input("MaTaiSan", sql.VarChar, id)
         .input("RestoreDate", sql.Date, restoreDate) // Truyền ngày khôi phục (nếu có)
         .query(`
           UPDATE NHANVIEN 
-          SET Thietbisudung = @MaThietBi, 
+          SET Thietbisudung = @MaTaiSan, 
               Ngaycap = CASE WHEN Ngaycap IS NOT NULL THEN Ngaycap ELSE COALESCE(@RestoreDate, GETDATE()) END, -- Chỉ điền ngày nếu DB đang trống
               Trangthai = N'Đang sử dụng'
           WHERE HoVaTen = @TenNV OR MaNV = @TenNV -- Tìm đúng nhân viên để gán
@@ -1194,16 +1295,29 @@ app.delete(
   async (req, res) => {
     try {
       await runTx(async (tx) => {
+        // 1. Gỡ thiết bị khỏi nhân viên đang sử dụng
         await new sql.Request(tx)
           .input("DevId", sql.VarChar, req.params.id)
           .query(
             "UPDATE dbo.NHANVIEN SET Thietbisudung=NULL, Ngaycap=NULL, Trangthai=N'Chưa cấp' WHERE Thietbisudung=@DevId",
           );
 
+        // 2. Xóa dữ liệu KIỂM KÊ CHUẨN BỊ TRƯỚC (Dọn dẹp khóa ngoại)
         await new sql.Request(tx)
-          .input("MaThietBi", sql.VarChar, req.params.id)
-          .query("DELETE FROM dbo.THIETBI WHERE MaThietBi=@MaThietBi");
+          .input("MaTaiSan", sql.VarChar, req.params.id)
+          .query("DELETE FROM dbo.KIEMKECHITIET WHERE MaTaiSan=@MaTaiSan");
+
+        // 3. Xóa dữ liệu MUA HÀNG LIÊN QUAN (Dọn dẹp khóa ngoại)
+        await new sql.Request(tx)
+          .input("MaTaiSan", sql.VarChar, req.params.id)
+          .query("DELETE FROM dbo.Purchase WHERE MaTaiSan=@MaTaiSan");
+
+        // 4. Cuối cùng mới xóa thiết bị trong bảng gốc THIETBI
+        await new sql.Request(tx)
+          .input("MaTaiSan", sql.VarChar, req.params.id)
+          .query("DELETE FROM dbo.THIETBI WHERE MaTaiSan=@MaTaiSan");
       });
+
       res.send("Xóa thiết bị thành công");
     } catch (err) {
       handleSqlError(res, err);
@@ -1226,7 +1340,7 @@ app.get("/api/users", authenticate, async (_req, res) => {
 
 // Gán / bỏ gán thiết bị cho người dùng
 app.post("/api/assign", authenticate, async (req, res) => {
-  const { MaNV, MaThietBi, Ngaycap } = req.body || {};
+  const { MaNV, MaTaiSan, Ngaycap } = req.body || {};
   if (!MaNV) return res.status(400).send("Thiếu MaNV");
 
   try {
@@ -1241,12 +1355,12 @@ app.post("/api/assign", authenticate, async (req, res) => {
       }
       const user = uRes.recordset[0];
 
-      if (!MaThietBi) {
+      if (!MaTaiSan) {
         if (user.Thietbisudung) {
           await new sql.Request(tx)
             .input("DevId", sql.VarChar, user.Thietbisudung)
             .query(
-              "UPDATE dbo.THIETBI SET Trangthai=N'Sẵn sàng', Nguoisudung=NULL WHERE MaThietBi=@DevId",
+              "UPDATE dbo.THIETBI SET Trangthai=N'Sẵn sàng', Nguoisudung=NULL WHERE MaTaiSan=@DevId",
             );
         }
         await new sql.Request(tx)
@@ -1258,8 +1372,8 @@ app.post("/api/assign", authenticate, async (req, res) => {
       }
 
       const dRes = await new sql.Request(tx)
-        .input("MaThietBi", sql.VarChar, MaThietBi)
-        .query("SELECT TOP 1 * FROM dbo.THIETBI WHERE MaThietBi=@MaThietBi");
+        .input("MaTaiSan", sql.VarChar, MaTaiSan)
+        .query("SELECT TOP 1 * FROM dbo.THIETBI WHERE MaTaiSan=@MaTaiSan");
       if (!dRes.recordset.length) {
         throw Object.assign(new Error("Không tìm thấy thiết bị"), {
           http: 404,
@@ -1283,28 +1397,28 @@ app.post("/api/assign", authenticate, async (req, res) => {
         });
       }
 
-      if (user.Thietbisudung && user.Thietbisudung !== MaThietBi) {
+      if (user.Thietbisudung && user.Thietbisudung !== MaTaiSan) {
         await new sql.Request(tx)
           .input("PrevDev", sql.VarChar, user.Thietbisudung)
           .query(
-            "UPDATE dbo.THIETBI SET Trangthai=N'Sẵn sàng', Nguoisudung=NULL WHERE MaThietBi=@PrevDev",
+            "UPDATE dbo.THIETBI SET Trangthai=N'Sẵn sàng', Nguoisudung=NULL WHERE MaTaiSan=@PrevDev",
           );
       }
 
       await new sql.Request(tx)
         .input("MaNV", sql.VarChar, MaNV)
-        .input("MaThietBi", sql.VarChar, MaThietBi)
+        .input("MaTaiSan", sql.VarChar, MaTaiSan)
         .input("Ngaycap", sql.Date, Ngaycap || null)
         .query(
-          "UPDATE dbo.NHANVIEN SET Thietbisudung=@MaThietBi, Ngaycap = CASE WHEN Ngaycap IS NOT NULL THEN Ngaycap ELSE COALESCE(@Ngaycap, GETDATE()) END, Trangthai=N'Đang sử dụng' WHERE MaNV=@MaNV",
+          "UPDATE dbo.NHANVIEN SET Thietbisudung=@MaTaiSan, Ngaycap = CASE WHEN Ngaycap IS NOT NULL THEN Ngaycap ELSE COALESCE(@Ngaycap, GETDATE()) END, Trangthai=N'Đang sử dụng' WHERE MaNV=@MaNV",
         );
 
       await new sql.Request(tx)
-        .input("MaThietBi", sql.VarChar, MaThietBi)
+        .input("MaTaiSan", sql.VarChar, MaTaiSan)
         .input("Nguoisudung", sql.NVarChar, user.HoVaTen)
         .input("MaNV", sql.VarChar, MaNV)
         .query(
-          "UPDATE dbo.THIETBI SET Trangthai=N'Đang sử dụng', Nguoisudung=@Nguoisudung, LastUserName=@Nguoisudung, LastUserId=@MaNV WHERE MaThietBi=@MaThietBi",
+          "UPDATE dbo.THIETBI SET Trangthai=N'Đang sử dụng', Nguoisudung=@Nguoisudung, LastUserName=@Nguoisudung, LastUserId=@MaNV WHERE MaTaiSan=@MaTaiSan",
         );
     });
 
@@ -1355,8 +1469,8 @@ app.post("/api/users", authenticate, async (req, res) => {
 
       if (Thietbisudung) {
         const dRes = await new sql.Request(tx)
-          .input("MaThietBi", sql.VarChar, Thietbisudung)
-          .query("SELECT TOP 1 * FROM dbo.THIETBI WHERE MaThietBi=@MaThietBi");
+          .input("MaTaiSan", sql.VarChar, Thietbisudung)
+          .query("SELECT TOP 1 * FROM dbo.THIETBI WHERE MaTaiSan=@MaTaiSan");
         if (!dRes.recordset.length) {
           throw Object.assign(new Error("Không tìm thấy thiết bị"), {
             http: 404,
@@ -1379,11 +1493,11 @@ app.post("/api/users", authenticate, async (req, res) => {
           });
         }
         await new sql.Request(tx)
-          .input("MaThietBi", sql.VarChar, Thietbisudung)
+          .input("MaTaiSan", sql.VarChar, Thietbisudung)
           .input("Nguoisudung", sql.NVarChar, HoVaTen)
           .input("MaNV", sql.VarChar, MaNV)
           .query(
-            "UPDATE dbo.THIETBI SET Trangthai=N'Đang sử dụng', Nguoisudung=@Nguoisudung, LastUserName=@Nguoisudung, LastUserId=@MaNV WHERE MaThietBi=@MaThietBi",
+            "UPDATE dbo.THIETBI SET Trangthai=N'Đang sử dụng', Nguoisudung=@Nguoisudung, LastUserName=@Nguoisudung, LastUserId=@MaNV WHERE MaTaiSan=@MaTaiSan",
           );
       }
     });
@@ -1459,7 +1573,7 @@ app.put("/api/users/:id", authenticate, authorizeAdmin, async (req, res) => {
             await new sql.Request(tx)
               .input("PrevDev", sql.VarChar, prevDevId)
               .query(
-                "UPDATE dbo.THIETBI SET Trangthai=N'Sẵn sàng', Nguoisudung=NULL WHERE MaThietBi=@PrevDev",
+                "UPDATE dbo.THIETBI SET Trangthai=N'Sẵn sàng', Nguoisudung=NULL WHERE MaTaiSan=@PrevDev",
               );
           }
           // Cập nhật nhân viên với thiết bị mới
@@ -1475,9 +1589,9 @@ app.put("/api/users/:id", authenticate, authorizeAdmin, async (req, res) => {
 
           // Kiểm tra thiết bị mới
           const dRes = await new sql.Request(tx)
-            .input("MaThietBi", sql.VarChar, newDevId)
+            .input("MaTaiSan", sql.VarChar, newDevId)
             .query(
-              "SELECT TOP 1 * FROM dbo.THIETBI WHERE MaThietBi=@MaThietBi",
+              "SELECT TOP 1 * FROM dbo.THIETBI WHERE MaTaiSan=@MaTaiSan",
             );
           if (!dRes.recordset.length) {
             throw Object.assign(new Error("Không tìm thấy thiết bị"), {
@@ -1498,18 +1612,18 @@ app.put("/api/users/:id", authenticate, authorizeAdmin, async (req, res) => {
             await new sql.Request(tx)
               .input("PrevDev", sql.VarChar, prevDevId)
               .query(
-                "UPDATE dbo.THIETBI SET Trangthai=N'Sẵn sàng', Nguoisudung=NULL WHERE MaThietBi=@PrevDev",
+                "UPDATE dbo.THIETBI SET Trangthai=N'Sẵn sàng', Nguoisudung=NULL WHERE MaTaiSan=@PrevDev",
               );
           }
 
           // Cập nhật nhân viên với thiết bị mới
           await new sql.Request(tx)
             .input("MaNV", sql.VarChar, targetId)
-            .input("MaThietBi", sql.VarChar, newDevId)
+            .input("MaTaiSan", sql.VarChar, newDevId)
             .input("Ngaycap", sql.Date, Ngaycap || null)
             .query(
               `UPDATE dbo.NHANVIEN 
-               SET Thietbisudung=@MaThietBi, 
+               SET Thietbisudung=@MaTaiSan, 
                    -- [FIX] Nếu đã có ngày cấp (từ Excel) thì giữ nguyên, chưa có mới lấy ngày mới
                    Ngaycap = CASE WHEN Ngaycap IS NOT NULL THEN Ngaycap ELSE COALESCE(@Ngaycap, GETDATE()) END, 
                    Trangthai=N'Đang sử dụng' 
@@ -1518,11 +1632,11 @@ app.put("/api/users/:id", authenticate, authorizeAdmin, async (req, res) => {
 
           // Cập nhật trạng thái thiết bị
           await new sql.Request(tx)
-            .input("MaThietBi", sql.VarChar, newDevId)
+            .input("MaTaiSan", sql.VarChar, newDevId)
             .input("Nguoisudung", sql.NVarChar, newName)
             .input("MaNV", sql.VarChar, targetId)
             .query(
-              "UPDATE dbo.THIETBI SET Trangthai=N'Đang sử dụng', Nguoisudung=@Nguoisudung, LastUserName=@Nguoisudung, LastUserId=@MaNV WHERE MaThietBi=@MaThietBi",
+              "UPDATE dbo.THIETBI SET Trangthai=N'Đang sử dụng', Nguoisudung=@Nguoisudung, LastUserName=@Nguoisudung, LastUserId=@MaNV WHERE MaTaiSan=@MaTaiSan",
             );
         }
       } else {
@@ -1536,10 +1650,10 @@ app.put("/api/users/:id", authenticate, authorizeAdmin, async (req, res) => {
         // Cập nhật tên người dùng trên thiết bị nếu đổi tên nhân viên
         if (curr.Thietbisudung && newName && newName !== curr.HoVaTen) {
           await new sql.Request(tx)
-            .input("MaThietBi", sql.VarChar, curr.Thietbisudung)
+            .input("MaTaiSan", sql.VarChar, curr.Thietbisudung)
             .input("Nguoisudung", sql.NVarChar, newName)
             .query(
-              "UPDATE dbo.THIETBI SET Nguoisudung=@Nguoisudung WHERE MaThietBi=@MaThietBi",
+              "UPDATE dbo.THIETBI SET Nguoisudung=@Nguoisudung WHERE MaTaiSan=@MaTaiSan",
             );
         }
       }
@@ -1565,7 +1679,7 @@ app.delete("/api/users/:id", authenticate, authorizeAdmin, async (req, res) => {
           await new sql.Request(tx)
             .input("DevId", sql.VarChar, u.Thietbisudung)
             .query(
-              "UPDATE dbo.THIETBI SET Trangthai=N'Sẵn sàng', Nguoisudung=NULL WHERE MaThietBi=@DevId",
+              "UPDATE dbo.THIETBI SET Trangthai=N'Sẵn sàng', Nguoisudung=NULL WHERE MaTaiSan=@DevId",
             );
         }
       }
@@ -1589,30 +1703,110 @@ app.post(
     if (!Array.isArray(items) || items.length === 0)
       return res.status(400).send("Không có dữ liệu");
 
+    const skipErrors = req.query.skipErrors === "true";
+
     try {
       const pool = await poolPromise;
-      const insertPromises = items.map((u) => {
-        const req = pool.request();
-        req.input("MaNV", sql.VarChar(50), u.MaNV);
-        req.input("HoVaTen", sql.NVarChar(100), u.HoVaTen || null);
-        req.input("Phongban", sql.NVarChar(100), u.Phongban || null);
-        req.input("Trangthai", sql.NVarChar(50), u.Trangthai || "Chưa cấp");
+      const errors = [];
+      const validItems = [];
+      
+      const usedDevices = new Set();
+      const usedUsers = new Set();
 
-        let parsedDate = null;
-        if (u.Ngaycap) {
-          const d = new Date(u.Ngaycap);
-          if (!isNaN(d) && d >= new Date("1753-01-01")) parsedDate = d;
+      for (const [index, u] of items.entries()) {
+        const rowNum = index + 1; // Dòng dữ liệu trong mảng (tương đối)
+        try {
+            if (!u.MaNV || !u.HoVaTen) throw new Error("Thiếu mã hoặc họ tên nhân viên.");
+            
+            // 1. Kiểm tra trùng mã NV trong nội bộ file Excel
+            if (usedUsers.has(u.MaNV)) {
+                throw new Error(`Mã nhân viên '${u.MaNV}' bị trùng lặp bên trong file Excel.`);
+            }
+            usedUsers.add(u.MaNV);
+
+            // 2. Kiểm tra mã NV trên database
+            const exists = await pool.request()
+              .input("MaNV", sql.VarChar, u.MaNV)
+              .query("SELECT 1 FROM dbo.NHANVIEN WHERE MaNV=@MaNV");
+            if (exists.recordset.length) {
+              throw new Error(`Mã nhân viên '${u.MaNV}' đã tồn tại trên hệ thống.`);
+            }
+
+            // 3. Kiểm tra Mã tài sản (Thietbisudung)
+            if (u.Thietbisudung) {
+                if (usedDevices.has(u.Thietbisudung)) {
+                    throw new Error(`Mã tài sản '${u.Thietbisudung}' bị phân công cho nhiều người trong cùng file Excel.`);
+                }
+                usedDevices.add(u.Thietbisudung);
+
+                const dRes = await pool.request()
+                  .input("MaTaiSan", sql.VarChar, u.Thietbisudung)
+                  .query("SELECT TOP 1 * FROM dbo.THIETBI WHERE MaTaiSan=@MaTaiSan");
+                if (!dRes.recordset.length) {
+                  throw new Error(`Mã tài sản '${u.Thietbisudung}' không tồn tại trên hệ thống.`);
+                }
+                const dev = dRes.recordset[0];
+                if (dev.Trangthai === "Bảo Hành" || dev.Trangthai === "Hư Hỏng") {
+                  throw new Error(`Mã tài sản '${u.Thietbisudung}' đang bảo hành/hư hỏng.`);
+                }
+                if (dev.Trangthai === "Đang sử dụng" && dev.Nguoisudung && dev.Nguoisudung !== u.HoVaTen) {
+                  throw new Error(`Mã tài sản '${u.Thietbisudung}' đã được cấp cho người khác.`);
+                }
+            }
+
+            validItems.push(u);
+        } catch (err) {
+            errors.push(`Dòng ${rowNum}: ${err.message}`);
         }
-        req.input("Ngaycap", sql.Date, parsedDate);
+      }
 
-        return req.query(`
-        INSERT INTO dbo.NHANVIEN (MaNV, HoVaTen, Phongban, Trangthai, Ngaycap)
-        VALUES (@MaNV, @HoVaTen, @Phongban, @Trangthai, @Ngaycap);
-      `);
+      if (!skipErrors && errors.length > 0) {
+          // Trả về danh sách lỗi để hiển thị lên frontend
+          return res.status(200).json({ requiresConfirmation: true, errors });
+      }
+
+      if (validItems.length === 0) {
+          return res.status(400).send("Không có dòng dữ liệu nào hợp lệ để nhập.");
+      }
+
+      // THỰC HIỆN INSERT CHO CÁC DÒNG HỢP LỆ TRONG 1 TRANSACTION
+      await runTx(async (tx) => {
+          for (const u of validItems) {
+            let parsedDate = null;
+            if (u.Ngaycap) {
+              const d = new Date(u.Ngaycap);
+              if (!isNaN(d) && d >= new Date("1753-01-01")) parsedDate = d;
+            }
+            
+            const trangthai = u.Trangthai || (u.Thietbisudung ? "Đang sử dụng" : "Chưa cấp");
+
+            await new sql.Request(tx)
+              .input("MaNV", sql.VarChar(50), u.MaNV)
+              .input("HoVaTen", sql.NVarChar(100), u.HoVaTen)
+              .input("Phongban", sql.NVarChar(100), u.Phongban || "")
+              .input("Thietbisudung", sql.VarChar, u.Thietbisudung || null)
+              .input("Ngaycap", sql.Date, parsedDate)
+              .input("Trangthai", sql.NVarChar(50), trangthai)
+              .query(`
+                INSERT INTO dbo.NHANVIEN (MaNV, HoVaTen, Phongban, Thietbisudung, Trangthai, Ngaycap)
+                VALUES (@MaNV, @HoVaTen, @Phongban, @Thietbisudung, @Trangthai, @Ngaycap)
+              `);
+
+            if (u.Thietbisudung) {
+                await new sql.Request(tx)
+                  .input("MaTaiSan", sql.VarChar, u.Thietbisudung)
+                  .input("Nguoisudung", sql.NVarChar, u.HoVaTen)
+                  .input("MaNV", sql.VarChar, u.MaNV)
+                  .query(`
+                    UPDATE dbo.THIETBI 
+                    SET Trangthai=N'Đang sử dụng', Nguoisudung=@Nguoisudung, LastUserName=@Nguoisudung, LastUserId=@MaNV 
+                    WHERE MaTaiSan=@MaTaiSan
+                  `);
+            }
+          }
       });
 
-      await Promise.all(insertPromises);
-      res.status(201).send("Đã nhập xong dữ liệu người sử dụng");
+      res.status(201).json({ success: true, message: `Đã nhập thành công ${validItems.length} người sử dụng.` });
     } catch (err) {
       handleSqlError(res, err);
     }
@@ -1627,19 +1821,18 @@ app.get("/public/devices/:id", async (req, res) => {
     const pool = await poolPromise;
     const r = await pool
       .request()
-      .input("MaThietBi", sql.VarChar, req.params.id).query(`
+      .input("MaTaiSan", sql.VarChar, req.params.id).query(`
         SELECT TOP 1
           t.*,
-          -- [FIX] Lấy ảnh từ cả 2 bảng, ưu tiên ảnh mới nhất từ THIETBI
           COALESCE(t.HinhAnhThucTe, kk.HinhAnhThucTe) as HinhAnhHienThi
         FROM dbo.THIETBI t
         LEFT JOIN (
           SELECT
-            MaThietBi, HinhAnhThucTe,
-            ROW_NUMBER() OVER(PARTITION BY MaThietBi ORDER BY DotID DESC, ThoiGianQuet DESC) as rn
+            MaTaiSan, HinhAnhThucTe,
+            ROW_NUMBER() OVER(PARTITION BY MaTaiSan ORDER BY DotID DESC, ThoiGianQuet DESC) as rn
           FROM dbo.KIEMKECHITIET WHERE HinhAnhThucTe IS NOT NULL
-        ) kk ON t.MaThietBi = kk.MaThietBi AND kk.rn = 1
-        WHERE t.MaThietBi = @MaThietBi
+        ) kk ON t.MaTaiSan = kk.MaTaiSan AND kk.rn = 1
+        WHERE t.MaTaiSan = @MaTaiSan
       `);
     if (!r.recordset.length) return res.status(404).send("Không tìm thấy");
     res.json(r.recordset[0]);
@@ -1654,28 +1847,28 @@ app.post("/public/kiemke", async (req, res) => {
 
   const {
     DotID,
-    MaThietBi,
+    MaTaiSan,
     TrangThaiThucTe,
     ViTriThucTe,
     NhanVienKiemKe,
     GhiChu,
   } = req.body || {};
 
-  if (!MaThietBi) {
-    return res.status(400).send("Thiếu MaThietBi");
+  if (!MaTaiSan) {
+    return res.status(400).send("Thiếu MaTaiSan");
   }
 
   try {
     await runTx(async (tx) => {
-      // 0. Chuẩn hóa DotID client gửi lên
+      // 0. Chuẩn hóa DotID client gửi lên (lưu vào Dotkiemke)
       let dotParam = parseInt(DotID, 10);
       if (!dotParam || dotParam < 1) dotParam = 1;
 
       // 1. Kiểm tra thiết bị có tồn tại không
       const devRes = await new sql.Request(tx)
-        .input("MaThietBi", sql.VarChar, MaThietBi)
+        .input("MaTaiSan", sql.VarChar, MaTaiSan)
         .query(
-          "SELECT TOP 1 MaThietBi FROM dbo.THIETBI WHERE MaThietBi=@MaThietBi",
+          "SELECT TOP 1 MaTaiSan FROM dbo.THIETBI WHERE MaTaiSan=@MaTaiSan",
         );
       if (!devRes.recordset.length) {
         throw Object.assign(new Error("Không tìm thấy thiết bị"), {
@@ -1683,39 +1876,13 @@ app.post("/public/kiemke", async (req, res) => {
         });
       }
 
-      // 2. Tìm hoặc tạo đợt kiểm kê
-      let finalDotId;
-
-      // 2.1. Thử tìm đúng DotID mà client nhập
-      const dotById = await new sql.Request(tx)
-        .input("DotID", sql.Int, dotParam)
-        .query("SELECT DotID FROM dbo.DOTKIEMKE WHERE DotID=@DotID");
-
-      if (dotById.recordset.length) {
-        // Đã có Đợt này rồi
-        finalDotId = dotById.recordset[0].DotID;
-      } else {
-        // Chưa có → tạo đợt mới, KHÔNG insert cột DotID
-        const createDot = await new sql.Request(tx).input(
-          "TenDot",
-          sql.NVarChar,
-          `Kiểm kê đợt ${dotParam}`,
-        ).query(`
-            INSERT INTO dbo.DOTKIEMKE (TenDot, NgayBatDau, GhiChu)
-            VALUES (@TenDot, CONVERT(date, GETDATE()), N'Tạo tự động từ /public/kiemke');
-            SELECT SCOPE_IDENTITY() AS DotID;
-          `);
-
-        finalDotId = createDot.recordset[0].DotID;
-        console.log("✅ Tạo mới DOTKIEMKE DotID =", finalDotId);
-      }
-
-      // 3. Upsert vào KIEMKECHITIET (mỗi DotID + MaThietBi chỉ 1 dòng)
+      // 2. Upsert thẳng vào Kiemketaisan (mỗi Dotkiemke + MaTaiSan chỉ 1 dòng)
       const checkRes = await new sql.Request(tx)
-        .input("DotID", sql.Int, finalDotId)
-        .input("MaThietBi", sql.VarChar, MaThietBi)
+        .input("Dotkiemke", sql.Int, dotParam)
+        .input("MaTaiSan", sql.VarChar, MaTaiSan)
+        .input("NhanVienKiemKe", sql.NVarChar, NhanVienKiemKe || null)
         .query(
-          "SELECT ID FROM dbo.KIEMKECHITIET WHERE DotID=@DotID AND MaThietBi=@MaThietBi",
+          "SELECT ID FROM dbo.Kiemketaisan WHERE Dotkiemke=@Dotkiemke AND MaTaiSan=@MaTaiSan AND ISNULL(NhanVienKiemKe,'')=ISNULL(@NhanVienKiemKe,'')",
         );
 
       if (checkRes.recordset.length) {
@@ -1727,27 +1894,27 @@ app.post("/public/kiemke", async (req, res) => {
           .input("NhanVienKiemKe", sql.NVarChar, NhanVienKiemKe || null)
           .input("GhiChu", sql.NVarChar, GhiChu || null)
           .query(
-            `UPDATE dbo.KIEMKECHITIET
+            `UPDATE dbo.Kiemketaisan
              SET TrangThaiThucTe = @TrangThaiThucTe,
                  ViTriThucTe     = @ViTriThucTe,
                  NhanVienKiemKe  = @NhanVienKiemKe,
                  ThoiGianQuet    = GETDATE(),
-                 GhiChu          = @GhiChu
+                 Ghichu          = @GhiChu
              WHERE ID=@ID`,
           );
       } else {
         // INSERT
         await new sql.Request(tx)
-          .input("DotID", sql.Int, finalDotId)
-          .input("MaThietBi", sql.VarChar, MaThietBi)
+          .input("Dotkiemke", sql.Int, dotParam)
+          .input("MaTaiSan", sql.VarChar, MaTaiSan)
           .input("TrangThaiThucTe", sql.NVarChar, TrangThaiThucTe || null)
           .input("ViTriThucTe", sql.NVarChar, ViTriThucTe || null)
           .input("NhanVienKiemKe", sql.NVarChar, NhanVienKiemKe || null)
           .input("GhiChu", sql.NVarChar, GhiChu || null)
           .query(
-            `INSERT INTO dbo.KIEMKECHITIET
-             (DotID, MaThietBi, TrangThaiThucTe, ViTriThucTe, NhanVienKiemKe, GhiChu)
-             VALUES (@DotID, @MaThietBi, @TrangThaiThucTe, @ViTriThucTe, @NhanVienKiemKe, @GhiChu)`,
+            `INSERT INTO dbo.Kiemketaisan
+             (Dotkiemke, MaTaiSan, TrangThaiThucTe, ViTriThucTe, NhanVienKiemKe, Ghichu)
+             VALUES (@Dotkiemke, @MaTaiSan, @TrangThaiThucTe, @ViTriThucTe, @NhanVienKiemKe, @GhiChu)`,
           );
       }
     });
@@ -1777,56 +1944,46 @@ app.post("/public/kiemke-bulk", async (req, res) => {
       let dotParam = parseInt(DotID, 10);
       if (!dotParam || dotParam < 1) dotParam = 1;
 
-      // Lấy / tạo DOTKIEMKE một lần
-      let finalDotId;
-      const dotById = await new sql.Request(tx)
-        .input("DotID", sql.Int, dotParam)
-        .query("SELECT DotID FROM dbo.DOTKIEMKE WHERE DotID=@DotID");
-
-      if (dotById.recordset.length) {
-        finalDotId = dotById.recordset[0].DotID;
-      } else {
-        const createDot = await new sql.Request(tx).input(
-          "TenDot",
-          sql.NVarChar,
-          `Đợt kiểm kê ${dotParam}`,
-        ).query(`
-            INSERT INTO dbo.DOTKIEMKE (TenDot, NgayBatDau, GhiChu)
-            VALUES (@TenDot, CONVERT(date, GETDATE()), N'Tạo tự động từ /public/kiemke-bulk');
-            SELECT SCOPE_IDENTITY() AS DotID;
-          `);
-        finalDotId = createDot.recordset[0].DotID;
-        console.log("✅ Tạo mới DOTKIEMKE (bulk) DotID =", finalDotId);
-      }
+      // TẠO CÁC BIẾN ĐẾM TRẠNG THÁI
+      let processedCount = 0;
+      let skippedCount = 0;
+      let skippedDetails = [];
 
       // Duyệt từng item trong mảng
       for (const it of items) {
         const {
-          MaThietBi,
+          MaTaiSan,
           TrangThaiThucTe,
           ViTriThucTe,
           NhanVienKiemKe,
           GhiChu,
         } = it || {};
-        if (!MaThietBi) continue; // bỏ qua nếu thiếu mã
+        if (!MaTaiSan) continue; // bỏ qua nếu thiếu mã
 
         // Kiểm tra thiết bị tồn tại
         const devRes = await new sql.Request(tx)
-          .input("MaThietBi", sql.VarChar, MaThietBi)
+          .input("MaTaiSan", sql.VarChar, MaTaiSan)
           .query(
-            "SELECT TOP 1 MaThietBi FROM dbo.THIETBI WHERE MaThietBi=@MaThietBi",
+            "SELECT TOP 1 MaTaiSan FROM dbo.THIETBI WHERE MaTaiSan=@MaTaiSan",
           );
         if (!devRes.recordset.length) {
-          console.warn("⚠️ Thiết bị không tồn tại, bỏ qua:", MaThietBi);
+          console.warn("⚠️ Thiết bị không tồn tại, bỏ qua:", MaTaiSan);
+          // NẾU KHÔNG TỒN TẠI, CỘNG VÀO BIẾN BỎ QUA VÀ GHI LOG
+          skippedCount++;
+          skippedDetails.push({
+            MaTaiSan,
+            reason: "Thiết bị chưa được tạo trong CSDL",
+          });
           continue;
         }
 
-        // Upsert vào KIEMKECHITIET
+        // Upsert vào Kiemketaisan
         const checkRes = await new sql.Request(tx)
-          .input("DotID", sql.Int, finalDotId)
-          .input("MaThietBi", sql.VarChar, MaThietBi)
+          .input("Dotkiemke", sql.Int, dotParam)
+          .input("MaTaiSan", sql.VarChar, MaTaiSan)
+          .input("NhanVienKiemKe", sql.NVarChar, NhanVienKiemKe || null)
           .query(
-            "SELECT ID FROM dbo.KIEMKECHITIET WHERE DotID=@DotID AND MaThietBi=@MaThietBi",
+            "SELECT ID FROM dbo.Kiemketaisan WHERE Dotkiemke=@Dotkiemke AND MaTaiSan=@MaTaiSan AND ISNULL(NhanVienKiemKe,'')=ISNULL(@NhanVienKiemKe,'')",
           );
 
         if (checkRes.recordset.length) {
@@ -1836,31 +1993,44 @@ app.post("/public/kiemke-bulk", async (req, res) => {
             .input("ViTriThucTe", sql.NVarChar, ViTriThucTe || null)
             .input("NhanVienKiemKe", sql.NVarChar, NhanVienKiemKe || null)
             .input("GhiChu", sql.NVarChar, GhiChu || null).query(`
-              UPDATE dbo.KIEMKECHITIET
+              UPDATE dbo.Kiemketaisan
               SET TrangThaiThucTe = @TrangThaiThucTe,
                   ViTriThucTe     = @ViTriThucTe,
                   NhanVienKiemKe  = @NhanVienKiemKe,
                   ThoiGianQuet    = GETDATE(),
-                  GhiChu          = @GhiChu
+                  Ghichu          = @GhiChu
               WHERE ID=@ID
             `);
         } else {
           await new sql.Request(tx)
-            .input("DotID", sql.Int, finalDotId)
-            .input("MaThietBi", sql.VarChar, MaThietBi)
+            .input("Dotkiemke", sql.Int, dotParam)
+            .input("MaTaiSan", sql.VarChar, MaTaiSan)
             .input("TrangThaiThucTe", sql.NVarChar, TrangThaiThucTe || null)
             .input("ViTriThucTe", sql.NVarChar, ViTriThucTe || null)
             .input("NhanVienKiemKe", sql.NVarChar, NhanVienKiemKe || null)
             .input("GhiChu", sql.NVarChar, GhiChu || null).query(`
-              INSERT INTO dbo.KIEMKECHITIET
-              (DotID, MaThietBi, TrangThaiThucTe, ViTriThucTe, NhanVienKiemKe, GhiChu)
-              VALUES (@DotID, @MaThietBi, @TrangThaiThucTe, @ViTriThucTe, @NhanVienKiemKe, @GhiChu)
+              INSERT INTO dbo.Kiemketaisan
+              (Dotkiemke, MaTaiSan, TrangThaiThucTe, ViTriThucTe, NhanVienKiemKe, Ghichu)
+              VALUES (@Dotkiemke, @MaTaiSan, @TrangThaiThucTe, @ViTriThucTe, @NhanVienKiemKe, @GhiChu)
             `);
         }
-      }
-    });
 
-    res.send("Đã ghi nhận kiểm kê (bulk)");
+        // CỘNG VÀO BIẾN LƯU THÀNH CÔNG
+        processedCount++;
+      }
+
+      // ÉP TRẢ VỀ JSON THAY VÌ TEXT
+      res.json({
+        success: true,
+        message: "Đã xử lý danh sách kiểm kê",
+        processed: processedCount,
+        skipped: skippedCount,
+        skippedDetails: skippedDetails,
+      });
+
+      // Xóa hoặc comment lại dòng lệnh cũ:
+      // res.send("Đã ghi nhận kiểm kê (bulk)");
+    });
   } catch (err) {
     console.error("❌ Lỗi máy chủ (bulk):", err);
     handleSqlError(res, err);
