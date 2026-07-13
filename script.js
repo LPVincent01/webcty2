@@ -187,12 +187,12 @@ importDevicesExcelInput.addEventListener("change", async (event) => {
       const keys = Object.keys(row);
       const idKey = keys.find(k => {
         const norm = String(k).toLowerCase().replace(/\s+/g, '');
-        return norm.includes('mataisan') || 
-               norm.includes('mathietbi') || 
-               norm.includes('mãtàisản') || 
-               norm.includes('mãthiếtbị') ||
-               norm.includes('matalsan') ||
-               norm.includes('mataisa');
+        return norm.includes('mataisan') ||
+          norm.includes('mathietbi') ||
+          norm.includes('mãtàisản') ||
+          norm.includes('mãthiếtbị') ||
+          norm.includes('matalsan') ||
+          norm.includes('mataisa');
       }) || keys[0]; // Lấy cột đầu tiên nếu không tìm thấy tên phù hợp
 
       const rawId = row[idKey] ?? "";
@@ -208,7 +208,7 @@ importDevicesExcelInput.addEventListener("change", async (event) => {
       };
       /* ===== BẮT ĐẦU FIX SERIALSN (EXCEL NUMBER -> STRING) ===== */
       const rowFmt = rawFmt[idx] || {}; // Lấy hàng tương ứng nhưng đã format chuỗi
-      
+
       const snKey = keys.find(k => {
         const norm = String(k).toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9]/gi, '');
         return norm.includes('serial') || norm.includes('sn');
@@ -336,7 +336,7 @@ importUsersExcelInput.addEventListener("change", async (event) => {
       const parsed = {
         ...row,
         MaNV: row.MaNV ? String(row.MaNV) : "",
-        Thietbisudung: row.Thietbisudung ? String(row.Thietbisudung).trim() : "",
+        Thietbisudung: "", // Bỏ trống theo yêu cầu
         Trangthai: row.Trangthai || "", // hoặc để trống, backend sẽ default "Chưa cấp"
       };
 
@@ -372,107 +372,18 @@ importUsersExcelInput.addEventListener("change", async (event) => {
 
     console.table(json); // Preview console
 
-    const confirmImport = confirm(`Bạn có chắc muốn nhập ${json.length} người sử dụng?`);
+    const confirmImport = confirm(
+      `Bạn có chắc muốn nhập ${json.length} người sử dụng?`,
+    );
     if (confirmImport) {
       const res = await fetchJson("/api/users/import", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(json),
       });
-      
       if (res) {
-        if (res.requiresConfirmation) {
-          // Hiển thị Modal tùy chỉnh để xác nhận bỏ qua lỗi
-          const overlay = document.createElement("div");
-          overlay.className = "modal";
-          overlay.style.display = "flex";
-          overlay.style.alignItems = "center";
-          overlay.style.justifyContent = "center";
-          overlay.style.position = "fixed";
-          overlay.style.top = "0";
-          overlay.style.left = "0";
-          overlay.style.width = "100%";
-          overlay.style.height = "100%";
-          overlay.style.backgroundColor = "rgba(0,0,0,0.5)";
-          overlay.style.zIndex = "9999";
-
-          const modalBox = document.createElement("div");
-          modalBox.style.backgroundColor = "var(--bg-color, #fff)";
-          modalBox.style.padding = "20px";
-          modalBox.style.borderRadius = "8px";
-          modalBox.style.maxWidth = "500px";
-          modalBox.style.width = "90%";
-          modalBox.style.boxShadow = "0 4px 6px rgba(0,0,0,0.1)";
-
-          const title = document.createElement("h3");
-          title.textContent = `Phát hiện ${res.errors.length} dòng dữ liệu lỗi/trùng lặp`;
-          title.style.marginTop = "0";
-          title.style.color = "var(--danger-color, #dc3545)";
-
-          const errorList = document.createElement("div");
-          errorList.style.maxHeight = "200px";
-          errorList.style.overflowY = "auto";
-          errorList.style.backgroundColor = "var(--bg-color, #f8f9fa)";
-          errorList.style.padding = "10px";
-          errorList.style.border = "1px solid var(--border-color, #ddd)";
-          errorList.style.marginBottom = "20px";
-          errorList.style.fontSize = "14px";
-          errorList.style.color = "var(--text-color, #333)";
-          
-          res.errors.forEach(err => {
-            const p = document.createElement("div");
-            p.textContent = err;
-            p.style.marginBottom = "5px";
-            errorList.appendChild(p);
-          });
-
-          const msg = document.createElement("p");
-          msg.textContent = "Bạn có muốn BỎ QUA các dòng lỗi này và TIẾP TỤC nhập các dòng hợp lệ còn lại không?";
-          msg.style.fontWeight = "bold";
-
-          const btnContainer = document.createElement("div");
-          btnContainer.style.display = "flex";
-          btnContainer.style.justifyContent = "flex-end";
-          btnContainer.style.gap = "10px";
-
-          const cancelBtn = document.createElement("button");
-          cancelBtn.textContent = "Hủy bỏ";
-          cancelBtn.className = "btn-secondary";
-          cancelBtn.onclick = () => {
-            document.body.removeChild(overlay);
-          };
-
-          const confirmBtn = document.createElement("button");
-          confirmBtn.textContent = "Bỏ qua lỗi & Tiếp tục";
-          confirmBtn.className = "btn-primary";
-          confirmBtn.style.backgroundColor = "var(--danger-color, #dc3545)";
-          confirmBtn.onclick = async () => {
-            document.body.removeChild(overlay);
-            // Gửi lại request với skipErrors=true
-            const res2 = await fetchJson("/api/users/import?skipErrors=true", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(json),
-            });
-            if (res2) {
-              showAlert(res2.message || "Nhập người sử dụng thành công ✔️", true);
-              loadUsers();
-            }
-          };
-
-          btnContainer.appendChild(cancelBtn);
-          btnContainer.appendChild(confirmBtn);
-          modalBox.appendChild(title);
-          modalBox.appendChild(errorList);
-          modalBox.appendChild(msg);
-          modalBox.appendChild(btnContainer);
-          overlay.appendChild(modalBox);
-          document.body.appendChild(overlay);
-
-        } else {
-          showAlert(res.message || "Nhập người sử dụng thành công ✔️", true);
-          loadUsers();
-        }
+        showAlert("Nhập người sử dụng thành công ✔️");
+        loadUsers();
       }
     }
   };

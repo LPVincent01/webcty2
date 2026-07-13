@@ -26,8 +26,8 @@ const config = {
 };
 
 /* ============== MIDDLEWARE CHUNG ============== */
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // CORS: cho phép origin từ localhost và IP LAN
 const ALLOWED_ORIGINS = [
@@ -665,14 +665,10 @@ app.post(
       const insertPromises = items.map((d) => {
         const req = pool.request();
 
-        // FIX: Nếu TenTaiSan rỗng, lấy chính MaTaiSan đắp vào, không cho phép null
-        const safeTenTaiSan = d.TenTaiSan ? d.TenTaiSan : d.MaTaiSan;
-        // FIX: Nếu LoaiTaiSan rỗng, để chuỗi rỗng hoặc "Khác"
-        const safeLoaiTaiSan = d.LoaiTaiSan ? d.LoaiTaiSan : "Khác";
-
+        // Bỏ việc gán cứng giá trị mặc định cho TenTaiSan/LoaiTaiSan nếu người dùng không nhập trong Excel (để giữ nguyên giá trị cũ)
         req.input("MaTaiSan", sql.VarChar(50), d.MaTaiSan);
-        req.input("TenTaiSan", sql.NVarChar(255), safeTenTaiSan);
-        req.input("LoaiTaiSan", sql.NVarChar(100), safeLoaiTaiSan);
+        req.input("TenTaiSan", sql.NVarChar(255), d.TenTaiSan || null);
+        req.input("LoaiTaiSan", sql.NVarChar(100), d.LoaiTaiSan || null);
         req.input("SerialSN", sql.VarChar(100), normalizeSerialSN(d.SerialSN));
 
         let parsedDate = null;
@@ -682,33 +678,42 @@ app.post(
             parsedDate = tempDate;
           }
         }
-        // FIX: Nếu NgayNhap bị lỗi, lấy ngày hiện tại thay vì null
-        req.input("NgayNhap", sql.Date, parsedDate || new Date());
+        req.input("NgayNhap", sql.Date, parsedDate);
 
-        req.input("Trangthai", sql.NVarChar(50), d.Trangthai || "Sẵn sàng");
+        req.input("Trangthai", sql.NVarChar(50), d.Trangthai || null);
         req.input("Nguoisudung", sql.NVarChar(100), d.Nguoisudung || null);
         req.input("Vitri", sql.NVarChar(100), d.Vitri || null);
+        req.input("CauHinh", sql.NVarChar(sql.MAX), d.CauHinh || null);
+        req.input("DonViTinh", sql.NVarChar(50), d.DonViTinh || null);
+        req.input("ThoiGianBaoHanh", sql.NVarChar(50), d.ThoiGianBaoHanh || null);
+        req.input("DonGia", sql.NVarChar(50), d.DonGia || null);
+        req.input("NamSanXuat", sql.Int, d.NamSanXuat || null);
         return req.query(`
   IF EXISTS (SELECT 1 FROM dbo.THIETBI WHERE MaTaiSan = @MaTaiSan)
   BEGIN
-    -- Nếu đã tồn tại -> CẬP NHẬT THÔNG TIN MỚI TỪ EXCEL
+    -- Nếu đã tồn tại -> CẬP NHẬT THÔNG TIN MỚI TỪ EXCEL (Bỏ qua ô trống)
     UPDATE dbo.THIETBI
-    SET TenTaiSan  = @TenTaiSan,
-        LoaiTaiSan = @LoaiTaiSan,
-        SerialSN    = @SerialSN,
-        NgayNhap    = @NgayNhap,
-        Trangthai   = @Trangthai,
-        Nguoisudung = @Nguoisudung,
-        Vitri       = @Vitri
+    SET TenTaiSan  = CASE WHEN @TenTaiSan IS NOT NULL AND @TenTaiSan != '' THEN @TenTaiSan ELSE TenTaiSan END,
+        LoaiTaiSan = CASE WHEN @LoaiTaiSan IS NOT NULL AND @LoaiTaiSan != '' THEN @LoaiTaiSan ELSE LoaiTaiSan END,
+        SerialSN    = CASE WHEN @SerialSN IS NOT NULL AND @SerialSN != '' THEN @SerialSN ELSE SerialSN END,
+        NgayNhap    = CASE WHEN @NgayNhap IS NOT NULL THEN @NgayNhap ELSE NgayNhap END,
+        Trangthai   = CASE WHEN @Trangthai IS NOT NULL AND @Trangthai != '' THEN @Trangthai ELSE Trangthai END,
+        Nguoisudung = CASE WHEN @Nguoisudung IS NOT NULL AND @Nguoisudung != '' THEN @Nguoisudung ELSE Nguoisudung END,
+        Vitri       = CASE WHEN @Vitri IS NOT NULL AND @Vitri != '' THEN @Vitri ELSE Vitri END,
+        CauHinh     = CASE WHEN @CauHinh IS NOT NULL AND CAST(@CauHinh AS NVARCHAR(MAX)) != '' THEN @CauHinh ELSE CauHinh END,
+        DonViTinh   = CASE WHEN @DonViTinh IS NOT NULL AND @DonViTinh != '' THEN @DonViTinh ELSE DonViTinh END,
+        ThoiGianBaoHanh = CASE WHEN @ThoiGianBaoHanh IS NOT NULL AND @ThoiGianBaoHanh != '' THEN @ThoiGianBaoHanh ELSE ThoiGianBaoHanh END,
+        DonGia      = CASE WHEN @DonGia IS NOT NULL AND @DonGia != '' THEN @DonGia ELSE DonGia END,
+        NamSanXuat  = CASE WHEN @NamSanXuat IS NOT NULL THEN @NamSanXuat ELSE NamSanXuat END
     WHERE MaTaiSan = @MaTaiSan
   END
   ELSE
   BEGIN
     -- Nếu chưa tồn tại -> THÊM MỚI HOÀN TOÀN
     INSERT INTO dbo.THIETBI
-      (MaTaiSan, TenTaiSan, LoaiTaiSan, SerialSN, NgayNhap, Trangthai, Nguoisudung, Vitri)
+      (MaTaiSan, TenTaiSan, LoaiTaiSan, SerialSN, NgayNhap, Trangthai, Nguoisudung, Vitri, CauHinh, DonViTinh, ThoiGianBaoHanh, DonGia, NamSanXuat)
     VALUES
-      (@MaTaiSan, @TenTaiSan, @LoaiTaiSan, @SerialSN, @NgayNhap, @Trangthai, @Nguoisudung, @Vitri)
+      (@MaTaiSan, ISNULL(@TenTaiSan, @MaTaiSan), ISNULL(@LoaiTaiSan, N'Khác'), @SerialSN, ISNULL(@NgayNhap, GETDATE()), ISNULL(@Trangthai, N'Sẵn sàng'), @Nguoisudung, @Vitri, @CauHinh, @DonViTinh, @ThoiGianBaoHanh, @DonGia, @NamSanXuat)
   END
 `);
       });
@@ -1037,6 +1042,11 @@ app.post("/api/devices", authenticate, async (req, res) => {
     Nguoisudung,
     Ngaycap,
     Vitri,
+    CauHinh,
+    DonViTinh,
+    ThoiGianBaoHanh,
+    DonGia,
+    NamSanXuat,
   } = req.body || {};
 
   if (!MaTaiSan || !TenTaiSan) {
@@ -1079,10 +1089,15 @@ app.post("/api/devices", authenticate, async (req, res) => {
           assignedUser ? assignedUser.HoVaTen : null,
         )
         .input("Vitri", sql.NVarChar, Vitri || null)
+        .input("CauHinh", sql.NVarChar(sql.MAX), CauHinh || null)
+        .input("DonViTinh", sql.NVarChar(50), DonViTinh || null)
+        .input("ThoiGianBaoHanh", sql.NVarChar(50), ThoiGianBaoHanh || null)
+        .input("DonGia", sql.NVarChar(50), DonGia || null)
+        .input("NamSanXuat", sql.Int, NamSanXuat || null)
         .query(
           `INSERT INTO dbo.THIETBI
-           (MaTaiSan, TenTaiSan, LoaiTaiSan, SerialSN, NgayNhap, Trangthai, Nguoisudung, Vitri)
-           VALUES (@MaTaiSan, @TenTaiSan, @LoaiTaiSan, @SerialSN, @NgayNhap, @Trangthai, @Nguoisudung, @Vitri)`,
+           (MaTaiSan, TenTaiSan, LoaiTaiSan, SerialSN, NgayNhap, Trangthai, Nguoisudung, Vitri, CauHinh, DonViTinh, ThoiGianBaoHanh, DonGia, NamSanXuat)
+           VALUES (@MaTaiSan, @TenTaiSan, @LoaiTaiSan, @SerialSN, @NgayNhap, @Trangthai, @Nguoisudung, @Vitri, @CauHinh, @DonViTinh, @ThoiGianBaoHanh, @DonGia, @NamSanXuat)`,
         );
 
       if (assignedUser) {
@@ -1127,6 +1142,11 @@ app.put("/api/devices/:id", authenticate, upload, async (req, res) => {
     Trangthai,
     Nguoisudung, // Biến này lấy từ form
     Vitri,
+    CauHinh,
+    DonViTinh,
+    ThoiGianBaoHanh,
+    DonGia,
+    NamSanXuat,
   } = req.body;
 
   // Xử lý ảnh
@@ -1228,6 +1248,11 @@ app.put("/api/devices/:id", authenticate, upload, async (req, res) => {
       .input("Trangthai", sql.NVarChar, Trangthai)
       .input("Nguoisudung", sql.NVarChar, Nguoisudung)
       .input("Vitri", sql.NVarChar, Vitri)
+      .input("CauHinh", sql.NVarChar(sql.MAX), CauHinh || null)
+      .input("DonViTinh", sql.NVarChar(50), DonViTinh || null)
+      .input("ThoiGianBaoHanh", sql.NVarChar(50), ThoiGianBaoHanh || null)
+      .input("DonGia", sql.NVarChar(50), DonGia || null)
+      .input("NamSanXuat", sql.Int, NamSanXuat || null)
       .input("HinhAnhThucTe", sql.NVarChar, HinhAnhThucTe).query(`
           UPDATE THIETBI
           SET TenTaiSan = @TenTaiSan,
@@ -1237,6 +1262,11 @@ app.put("/api/devices/:id", authenticate, upload, async (req, res) => {
               Trangthai = @Trangthai,
               Nguoisudung = @Nguoisudung,
               Vitri = @Vitri,
+              CauHinh = @CauHinh,
+              DonViTinh = @DonViTinh,
+              ThoiGianBaoHanh = @ThoiGianBaoHanh,
+              DonGia = @DonGia,
+              NamSanXuat = @NamSanXuat,
               HinhAnhThucTe = @HinhAnhThucTe
           WHERE MaTaiSan = @MaTaiSan
         `);

@@ -1,11 +1,17 @@
 const translations = {
   // Tiếng Việt
   vi: {
+    deviceDetailsTitle: "Chi tiết tài sản",
+    currentStatus: "Trạng thái hiện tại",
+    detailedInfo: "Thông tin chi tiết",
+    productionYear: "Năm sản xuất",
+    configurationSpecs: "Cấu hình / Thông số:",
+    noSpecsUpdated: "Chưa cập nhật thông số",
     purchasePrice: "Thành tiền (VND)",
     purchaseSource: "Nguồn mua",
     appTitle: "Quản Lý Tài Sản Cố Định",
     // Login
-    purchaseListTitle: "Lịch sử mua hàng",
+    purchaseListTitle: "Thông tin mua hàng",
     login: "Đăng nhập Hệ Thống EAM",
     selectDevice: "Chọn tài sản...",
     username: "Tài khoản",
@@ -28,7 +34,7 @@ const translations = {
     deviceSearchInputPlaceholder: "Tìm theo mã / tên tài sản",
     userSearchInputPlaceholder: "Tìm theo mã NV / họ và tên",
     userList: "Danh sách người sử dụng",
-    purchaseList: "Lịch sử mua hàng",
+    purchaseList: "Thông tin mua hàng",
     statisticsChart: "Biểu đồ thống kê",
     // Overview Section
     overviewTitle: "Tổng Quan",
@@ -362,6 +368,12 @@ const translations = {
 
   // Tiếng Trung
   zh: {
+    deviceDetailsTitle: "资产详情",
+    currentStatus: "当前状态",
+    detailedInfo: "详细信息",
+    productionYear: "生产年份",
+    configurationSpecs: "配置/参数:",
+    noSpecsUpdated: "尚未更新参数",
     purchasePrice: "金额 (VND)",
     purchaseSource: "采购来源",
     selectDevice: "选择资产...",
@@ -384,7 +396,7 @@ const translations = {
     deviceSearchInputPlaceholder: "按资产代码/名称搜索",
     userSearchInputPlaceholder: "按员工号/姓名搜索",
     userList: "用户列表",
-    purchaseList: "采购历史",
+    purchaseList: "采购信息",
     statisticsChart: "统计图表",
     overviewTitle: "总览",
     overviewDescription: "资产系统总体统计",
