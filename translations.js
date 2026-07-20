@@ -11,8 +11,8 @@ const translations = {
     purchaseSource: "Nguồn mua",
     appTitle: "Quản Lý Tài Sản Cố Định",
     // Login
-    purchaseListTitle: "Thông tin mua hàng",
-    login: "Đăng nhập Hệ Thống EAM",
+    purchaseListTitle: "Lịch sử mua hàng",
+    login: "Đăng nhập",
     selectDevice: "Chọn tài sản...",
     username: "Tài khoản",
     addPurchaseModalTitle: "Thêm thông tin mua hàng",
@@ -34,7 +34,7 @@ const translations = {
     deviceSearchInputPlaceholder: "Tìm theo mã / tên tài sản",
     userSearchInputPlaceholder: "Tìm theo mã NV / họ và tên",
     userList: "Danh sách người sử dụng",
-    purchaseList: "Thông tin mua hàng",
+    purchaseList: "Lịch sử mua hàng",
     statisticsChart: "Biểu đồ thống kê",
     // Overview Section
     overviewTitle: "Tổng Quan",
@@ -396,7 +396,7 @@ const translations = {
     deviceSearchInputPlaceholder: "按资产代码/名称搜索",
     userSearchInputPlaceholder: "按员工号/姓名搜索",
     userList: "用户列表",
-    purchaseList: "采购信息",
+    purchaseList: "采购历史",
     statisticsChart: "统计图表",
     overviewTitle: "总览",
     overviewDescription: "资产系统总体统计",

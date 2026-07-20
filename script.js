@@ -89,22 +89,11 @@ const loginForm = document.getElementById("loginForm");
 
 // Ẩn form lúc mới vào, click nền hoặc chữ SPRINGTEX mới hiện
 if (loginPage && loginForm) {
-  loginPage.addEventListener(
-    "click",
-    (e) => {
-      // chỉ xử lý nếu form đang ẩn
-      if (!loginForm.classList.contains("hidden")) return;
-
-      // click trên nền login hoặc chữ SPRINGTEX mới bật form
-      if (
-        e.target === loginPage ||
-        e.target.classList.contains("brand-banner")
-      ) {
-        loginForm.classList.remove("hidden");
-      }
-    },
-    { once: true }, // chỉ chạy 1 lần, sau đó form luôn hiện
-  );
+  loginPage.addEventListener("click", () => {
+    if (loginForm.classList.contains("hidden")) {
+      loginForm.classList.remove("hidden");
+    }
+  });
 }
 
 const appContainer = document.getElementById("appContainer");
@@ -187,12 +176,12 @@ importDevicesExcelInput.addEventListener("change", async (event) => {
       const keys = Object.keys(row);
       const idKey = keys.find(k => {
         const norm = String(k).toLowerCase().replace(/\s+/g, '');
-        return norm.includes('mataisan') ||
-          norm.includes('mathietbi') ||
-          norm.includes('mãtàisản') ||
-          norm.includes('mãthiếtbị') ||
-          norm.includes('matalsan') ||
-          norm.includes('mataisa');
+        return norm.includes('mataisan') || 
+               norm.includes('mathietbi') || 
+               norm.includes('mãtàisản') || 
+               norm.includes('mãthiếtbị') ||
+               norm.includes('matalsan') ||
+               norm.includes('mataisa');
       }) || keys[0]; // Lấy cột đầu tiên nếu không tìm thấy tên phù hợp
 
       const rawId = row[idKey] ?? "";
@@ -208,7 +197,7 @@ importDevicesExcelInput.addEventListener("change", async (event) => {
       };
       /* ===== BẮT ĐẦU FIX SERIALSN (EXCEL NUMBER -> STRING) ===== */
       const rowFmt = rawFmt[idx] || {}; // Lấy hàng tương ứng nhưng đã format chuỗi
-
+      
       const snKey = keys.find(k => {
         const norm = String(k).toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9]/gi, '');
         return norm.includes('serial') || norm.includes('sn');
@@ -336,7 +325,7 @@ importUsersExcelInput.addEventListener("change", async (event) => {
       const parsed = {
         ...row,
         MaNV: row.MaNV ? String(row.MaNV) : "",
-        Thietbisudung: "", // Bỏ trống theo yêu cầu
+        Thietbisudung: row.Thietbisudung ? String(row.Thietbisudung).trim() : "",
         Trangthai: row.Trangthai || "", // hoặc để trống, backend sẽ default "Chưa cấp"
       };
 
@@ -372,18 +361,107 @@ importUsersExcelInput.addEventListener("change", async (event) => {
 
     console.table(json); // Preview console
 
-    const confirmImport = confirm(
-      `Bạn có chắc muốn nhập ${json.length} người sử dụng?`,
-    );
+    const confirmImport = confirm(`Bạn có chắc muốn nhập ${json.length} người sử dụng?`);
     if (confirmImport) {
       const res = await fetchJson("/api/users/import", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(json),
       });
+      
       if (res) {
-        showAlert("Nhập người sử dụng thành công ✔️");
-        loadUsers();
+        if (res.requiresConfirmation) {
+          // Hiển thị Modal tùy chỉnh để xác nhận bỏ qua lỗi
+          const overlay = document.createElement("div");
+          overlay.className = "modal";
+          overlay.style.display = "flex";
+          overlay.style.alignItems = "center";
+          overlay.style.justifyContent = "center";
+          overlay.style.position = "fixed";
+          overlay.style.top = "0";
+          overlay.style.left = "0";
+          overlay.style.width = "100%";
+          overlay.style.height = "100%";
+          overlay.style.backgroundColor = "rgba(0,0,0,0.5)";
+          overlay.style.zIndex = "9999";
+
+          const modalBox = document.createElement("div");
+          modalBox.style.backgroundColor = "var(--bg-color, #fff)";
+          modalBox.style.padding = "20px";
+          modalBox.style.borderRadius = "8px";
+          modalBox.style.maxWidth = "500px";
+          modalBox.style.width = "90%";
+          modalBox.style.boxShadow = "0 4px 6px rgba(0,0,0,0.1)";
+
+          const title = document.createElement("h3");
+          title.textContent = `Phát hiện ${res.errors.length} dòng dữ liệu lỗi/trùng lặp`;
+          title.style.marginTop = "0";
+          title.style.color = "var(--danger-color, #dc3545)";
+
+          const errorList = document.createElement("div");
+          errorList.style.maxHeight = "200px";
+          errorList.style.overflowY = "auto";
+          errorList.style.backgroundColor = "var(--bg-color, #f8f9fa)";
+          errorList.style.padding = "10px";
+          errorList.style.border = "1px solid var(--border-color, #ddd)";
+          errorList.style.marginBottom = "20px";
+          errorList.style.fontSize = "14px";
+          errorList.style.color = "var(--text-color, #333)";
+          
+          res.errors.forEach(err => {
+            const p = document.createElement("div");
+            p.textContent = err;
+            p.style.marginBottom = "5px";
+            errorList.appendChild(p);
+          });
+
+          const msg = document.createElement("p");
+          msg.textContent = "Bạn có muốn BỎ QUA các dòng lỗi này và TIẾP TỤC nhập các dòng hợp lệ còn lại không?";
+          msg.style.fontWeight = "bold";
+
+          const btnContainer = document.createElement("div");
+          btnContainer.style.display = "flex";
+          btnContainer.style.justifyContent = "flex-end";
+          btnContainer.style.gap = "10px";
+
+          const cancelBtn = document.createElement("button");
+          cancelBtn.textContent = "Hủy bỏ";
+          cancelBtn.className = "btn-secondary";
+          cancelBtn.onclick = () => {
+            document.body.removeChild(overlay);
+          };
+
+          const confirmBtn = document.createElement("button");
+          confirmBtn.textContent = "Bỏ qua lỗi & Tiếp tục";
+          confirmBtn.className = "btn-primary";
+          confirmBtn.style.backgroundColor = "var(--danger-color, #dc3545)";
+          confirmBtn.onclick = async () => {
+            document.body.removeChild(overlay);
+            // Gửi lại request với skipErrors=true
+            const res2 = await fetchJson("/api/users/import?skipErrors=true", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(json),
+            });
+            if (res2) {
+              showAlert(res2.message || "Nhập người sử dụng thành công ✔️", true);
+              loadUsers();
+            }
+          };
+
+          btnContainer.appendChild(cancelBtn);
+          btnContainer.appendChild(confirmBtn);
+          modalBox.appendChild(title);
+          modalBox.appendChild(errorList);
+          modalBox.appendChild(msg);
+          modalBox.appendChild(btnContainer);
+          overlay.appendChild(modalBox);
+          document.body.appendChild(overlay);
+
+        } else {
+          showAlert(res.message || "Nhập người sử dụng thành công ✔️", true);
+          loadUsers();
+        }
       }
     }
   };
@@ -639,7 +717,6 @@ function renderDevicesTable(dataToRender) {
       // Ưu tiên hiển thị TenTaiSan, nếu không có thì lấy Model
       const name = d.TenTaiSan || d.Model || "";
 
-      // [BẮT ĐẦU SỬA] -----------------------------------------------------------
       // [CODE MỚI] Ưu tiên lấy cột HinhAnhHienThi, nếu không có thì lấy HinhAnhThucTe
       // Chú ý: Kiểm tra kỹ xem nó có phải là chuỗi (string) không để tránh lỗi crash
       const rawImg = d.HinhAnhHienThi || d.HinhAnhThucTe;
@@ -657,18 +734,13 @@ function renderDevicesTable(dataToRender) {
       // [KẾT THÚC SỬA] ----------------------------------------------------------
 
       return `
-      <tr>
+      <tr style="cursor: pointer;" onclick="openDeviceDetail('${d.MaTaiSan}')" class="device-row">
         <td>${stt}</td>
         <td>${d.MaTaiSan}</td>
         <td>${name}</td>
-        <td>${d.LoaiTaiSan || ""}</td>
-        <td>${d.SerialSN || "-"}</td>
         <td>${formatDate(d.NgayNhap)}</td>
         <td><span class="status-badge ${getStatusClass(d.Trangthai)}">${getTranslatedStatus(d.Trangthai)}</span></td>
-        <td>${d.Nguoisudung || "-"}</td>
-        <td>${d.Vitri || "-"}</td>
-        <td data-label="Hình ảnh">${imageHtml}</td>
-        <td>${actions}</td>
+        <td onclick="event.stopPropagation()">${actions}</td>
       </tr>`;
     })
     .join(""); // Nối tất cả thành 1 chuỗi lớn
@@ -1135,11 +1207,132 @@ function getFilteredDevices() {
     filtered = filtered.filter((d) => d.Trangthai === currentTabStatus);
   }
 
+  // --- Lọc theo Checkbox Cột (Excel-style) ---
+  if (typeof tableColumnFilters !== 'undefined') {
+    for (const [colKey, selectedValues] of Object.entries(tableColumnFilters)) {
+      if (selectedValues && selectedValues.length > 0) {
+        filtered = filtered.filter(d => selectedValues.includes(d[colKey] || ""));
+      }
+    }
+  }
+
   // --- Sắp xếp ---
   filtered = [...filtered];
   sortData(filtered, deviceSort);
 
   return filtered;
+}
+
+function renderActiveFiltersBar() {
+  const container = document.getElementById("devicesActiveFiltersBar");
+  if (!container) return;
+
+  // Check if there are any active filters
+  const activeKeys = Object.keys(tableColumnFilters).filter(key => tableColumnFilters[key] && tableColumnFilters[key].length > 0);
+  
+  if (activeKeys.length === 0) {
+    container.style.display = 'none';
+    return;
+  }
+  
+  container.style.display = 'flex';
+  container.innerHTML = ''; // Clear
+
+  activeKeys.forEach(colKey => {
+    const values = tableColumnFilters[colKey];
+    
+    // Get column label from TH
+    const th = document.querySelector(`th[data-col="${colKey}"]`) || document.querySelector(`th[data-sort-key="${colKey}"]`);
+    let colName = colKey;
+    if (th) {
+      // Find the text content, excluding the icon
+      const clone = th.cloneNode(true);
+      const icon = clone.querySelector('i');
+      if (icon) icon.remove();
+      colName = clone.textContent.trim();
+    }
+
+    const group = document.createElement("div");
+    group.className = "active-filter-group";
+
+    // Remove button
+    const removeBtn = document.createElement("div");
+    removeBtn.className = "active-filter-remove";
+    removeBtn.innerHTML = '<i class="fas fa-times"></i>';
+    removeBtn.title = (typeof t === 'function') ? t("clearFilter") || "Xóa bộ lọc" : "Xóa bộ lọc";
+    removeBtn.onclick = () => {
+      delete tableColumnFilters[colKey];
+      applyFiltersAndRender();
+    };
+    
+    // Checkbox (visual)
+    const cbDiv = document.createElement("div");
+    cbDiv.className = "active-filter-checkbox";
+    cbDiv.innerHTML = '<input type="checkbox" checked disabled>';
+
+    // Label
+    const labelDiv = document.createElement("div");
+    labelDiv.className = "active-filter-label";
+    labelDiv.textContent = colName;
+
+    // Condition
+    const condDiv = document.createElement("div");
+    condDiv.className = "active-filter-condition";
+    condDiv.textContent = values.length === 1 ? "=" : "In";
+
+    // Values
+    const valsDiv = document.createElement("div");
+    valsDiv.className = "active-filter-values";
+    
+    values.forEach(val => {
+      let displayVal = val;
+      if (val === "") {
+        displayVal = (typeof translations !== 'undefined' && translations[currentLang] && translations[currentLang].empty) ? translations[currentLang].empty : "(Trống)";
+      } else {
+        const dict = (typeof translations !== 'undefined' && translations[currentLang]) ? translations[currentLang] : null;
+        if (dict && dict[val]) {
+          displayVal = dict[val];
+        } else if (colKey === 'Trangthai' && dict) {
+          if (val === 'Sẵn sàng') displayVal = dict.status_available || val;
+          if (val === 'Đang sử dụng') displayVal = dict.status_inUse || val;
+          if (val === 'Bảo Hành') displayVal = dict.status_warranty || val;
+          if (val === 'Hư Hỏng') displayVal = dict.status_broken || val;
+        } else if (typeof translateSpecLine === 'function') {
+          displayVal = translateSpecLine(val, currentLang);
+        }
+      }
+      
+      const v = document.createElement("span");
+      v.className = "active-filter-val";
+      
+      const vText = document.createElement("span");
+      vText.textContent = displayVal;
+      v.appendChild(vText);
+      
+      const vRemove = document.createElement("i");
+      vRemove.className = "fas fa-times val-remove-icon";
+      vRemove.title = (typeof t === 'function') ? t("clearFilter") || "Xóa giá trị này" : "Xóa giá trị này";
+      vRemove.onclick = (e) => {
+        e.stopPropagation();
+        tableColumnFilters[colKey] = tableColumnFilters[colKey].filter(item => item !== val);
+        if (tableColumnFilters[colKey].length === 0) {
+          delete tableColumnFilters[colKey];
+        }
+        applyFiltersAndRender();
+      };
+      v.appendChild(vRemove);
+      
+      valsDiv.appendChild(v);
+    });
+
+    group.appendChild(removeBtn);
+    group.appendChild(cbDiv);
+    group.appendChild(labelDiv);
+    group.appendChild(condDiv);
+    group.appendChild(valsDiv);
+
+    container.appendChild(group);
+  });
 }
 
 function applyFiltersAndRender() {
@@ -1170,6 +1363,9 @@ function applyFiltersAndRender() {
 
   // Render bảng với dữ liệu ĐÃ CẮT
   renderDevicesTable(dataOnPage);
+  
+  // Render active filters bar
+  renderActiveFiltersBar();
 
   // Render thanh phân trang (Truyền đúng ID chuỗi "devicesPagination")
   renderPagination(
@@ -1548,6 +1744,14 @@ function renderMonthlyChart(year) {
         title: {
           display: true,
           text: `${t("chart_monthly_stats_title")} (${year})`,
+          font: {
+            size: 16,
+            weight: 'bold'
+          },
+          padding: {
+            top: 10,
+            bottom: 20
+          }
         },
       },
       scales: {
@@ -1768,6 +1972,21 @@ function editDevice(id) {
   document.getElementById("Trangthai").value = d.Trangthai;
   loadUsersForDeviceSelect(d.Nguoisudung);
   document.getElementById("Vitri").value = d.Vitri || "";
+  if (document.getElementById("CauHinh")) {
+    document.getElementById("CauHinh").value = d.CauHinh || "";
+  }
+  if (document.getElementById("DonViTinh")) {
+    document.getElementById("DonViTinh").value = d.DonViTinh || "";
+  }
+  if (document.getElementById("ThoiGianBaoHanh")) {
+    document.getElementById("ThoiGianBaoHanh").value = d.ThoiGianBaoHanh || "";
+  }
+  if (document.getElementById("DonGia")) {
+    document.getElementById("DonGia").value = d.DonGia || "";
+  }
+  if (document.getElementById("NamSanXuat")) {
+    document.getElementById("NamSanXuat").value = d.NamSanXuat || "";
+  }
 
   ensureQrUI();
   resetQrUI();
@@ -1796,6 +2015,11 @@ async function saveDevice() {
     Trangthai: document.getElementById("Trangthai").value,
     Nguoisudung: document.getElementById("Nguoisudung").value || null,
     Vitri: document.getElementById("Vitri").value.trim(),
+    CauHinh: document.getElementById("CauHinh") ? document.getElementById("CauHinh").value.trim() : null,
+    DonViTinh: document.getElementById("DonViTinh") ? document.getElementById("DonViTinh").value.trim() : null,
+    ThoiGianBaoHanh: document.getElementById("ThoiGianBaoHanh") ? document.getElementById("ThoiGianBaoHanh").value.trim() : null,
+    DonGia: document.getElementById("DonGia") ? document.getElementById("DonGia").value.trim() : null,
+    NamSanXuat: document.getElementById("NamSanXuat") ? document.getElementById("NamSanXuat").value.trim() : null,
   };
 
   // [CHÈN VÀO SAU ĐOẠN KHAI BÁO PAYLOAD] ------------------------------------
@@ -2364,14 +2588,47 @@ exportPurchasesExcelBtn?.addEventListener("click", exportPurchasesToExcel);
 addPurchaseBtn?.addEventListener("click", addPurchase);
 
 // --- Xử lý giao diện cho 2 Cụm bộ lọc động ---
+function updateTypeDropdownOptions(targetIndex) {
+  const typeEl = document.getElementById(`dynamicFilterType${targetIndex}`);
+  if (!typeEl || typeEl.value !== "type") return;
+  
+  const selectEl = document.getElementById(`dynamicFilterValue${targetIndex}`);
+  if (!selectEl) return;
+  
+  const currentSelectedValue = selectEl.value;
+  const otherIndex = targetIndex === 1 ? 2 : 1;
+  const otherType = document.getElementById(`dynamicFilterType${otherIndex}`)?.value;
+  let filteredDevices = devices;
+  
+  if (otherType === "prefix") {
+    const otherVal = document.getElementById(`dynamicFilterValue${otherIndex}`)?.value;
+    if (otherVal) {
+      filteredDevices = devices.filter(d => d.MaTaiSan.startsWith(otherVal));
+    }
+  }
+  
+  const uniqueTypes = [...new Set(filteredDevices.map(d => d.LoaiTaiSan).filter(Boolean))].sort();
+  let optionsHtml = `<option value="" data-i18n="selectType">${t("selectType")}</option>`;
+  uniqueTypes.forEach(typeVal => {
+    optionsHtml += `<option value="${typeVal}">${typeVal}</option>`;
+  });
+  
+  selectEl.innerHTML = optionsHtml;
+  // Giữ lại giá trị đang chọn nếu nó vẫn tồn tại trong list mới
+  selectEl.value = uniqueTypes.includes(currentSelectedValue) ? currentSelectedValue : "";
+}
+
+function triggerCrossUpdate(sourceIndex) {
+  const otherIndex = sourceIndex === 1 ? 2 : 1;
+  updateTypeDropdownOptions(otherIndex);
+}
+
 function setupDynamicFilter(index) {
   const typeEl = document.getElementById(`dynamicFilterType${index}`);
   if (!typeEl) return;
 
   typeEl.addEventListener("change", function () {
-    const container = document.getElementById(
-      `dynamicFilterValueContainer${index}`,
-    );
+    const container = document.getElementById(`dynamicFilterValueContainer${index}`);
     const type = this.value;
 
     container.innerHTML = "";
@@ -2379,8 +2636,7 @@ function setupDynamicFilter(index) {
     container.style.gap = "5px";
 
     if (type === "prefix") {
-      if (type === "prefix") {
-        container.innerHTML = `
+      container.innerHTML = `
         <select id="dynamicFilterValue${index}" style="border-radius: 8px; border: 1px solid #ddd; padding: 0 10px; height: 36px; outline: none; font-size: 0.9rem;">
           <option value="" data-i18n="selectPrefix">${t("selectPrefix")}</option>
           <option value="EQP" data-i18n="prefix_EQP">${t("prefix_EQP")}</option>
@@ -2390,20 +2646,15 @@ function setupDynamicFilter(index) {
           <option value="MCH" data-i18n="prefix_MCH">${t("prefix_MCH")}</option>
         </select>
       `;
-      }
+      // Khi chọn prefix, update cái filter kia nếu nó đang là type
+      document.getElementById(`dynamicFilterValue${index}`).addEventListener("change", () => triggerCrossUpdate(index));
     } else if (type === "type") {
-      const uniqueTypes = [
-        ...new Set(devices.map((d) => d.LoaiTaiSan).filter(Boolean)),
-      ].sort();
-      let optionsHtml = `<option value="" data-i18n="selectType">${t("selectType")}</option>`;
-      uniqueTypes.forEach(
-        (t) => (optionsHtml += `<option value="${t}">${t}</option>`),
-      );
       container.innerHTML = `
         <select id="dynamicFilterValue${index}" style="border-radius: 8px; border: 1px solid #ddd; padding: 0 10px; height: 36px; outline: none; max-width: 200px; font-size: 0.9rem;">
-          ${optionsHtml}
         </select>
       `;
+      // Populate immediately based on current state
+      updateTypeDropdownOptions(index);
     } else if (type === "date") {
       container.innerHTML = `
         <input type="date" id="dynamicFilterValue${index}Start" style="border-radius: 8px; border: 1px solid #ddd; padding: 0 5px; height: 36px; outline: none; font-size: 0.9rem; max-width: 130px;" title="Từ ngày">
@@ -2418,7 +2669,9 @@ function setupDynamicFilter(index) {
         <input type="text" id="dynamicFilterValue${index}" value="${currentMonthStr} ${currentYear}" disabled style="border-radius: 8px; border: 1px solid #ddd; padding: 0 10px; height: 36px; outline: none; font-size: 0.9rem; background-color: #f1f5f9; color: #475569; width: 130px; text-align: center; cursor: not-allowed;">
       `;
     }
-    // LƯU Ý: Không tự động chạy applyFiltersAndRender() ở đây nữa!
+    
+    // Báo cho filter kia biết filter này vừa đổi loại
+    triggerCrossUpdate(index);
   });
 }
 
@@ -2797,7 +3050,7 @@ function ensureQrUI() {
     "downloadQr",
   )}</button>
       </div>
-      <div class="muted">QR sẽ mở trang thông tin thiết bị (display.html).</div>
+      <!-- QR info text removed -->
     </div>
   `;
   modalBody.appendChild(wrap);
@@ -2929,7 +3182,18 @@ function applyTranslations() {
   // Helper to set text content
   const setText = (selector, key) => {
     const el = document.querySelector(selector);
-    if (el) el.textContent = dict[key] || key;
+    if (el) {
+      const icon = el.querySelector('i');
+      if (icon) {
+        // Remove existing text nodes
+        Array.from(el.childNodes).forEach(node => {
+          if (node.nodeType === 3) node.remove();
+        });
+        el.insertBefore(document.createTextNode((dict[key] || key) + " "), el.firstChild);
+      } else {
+        el.textContent = dict[key] || key;
+      }
+    }
   };
 
   const setI18nText = (element, key) => {
@@ -2973,8 +3237,8 @@ function applyTranslations() {
 
   // Device List
   setText("#devicesSection .table-title", "deviceListTitle");
-  setText("#addDeviceBtn", "addDevice");
-  setText("#exportDevicesExcelBtn", "exportExcel");
+  setText("#addDeviceBtn span.mobile-hide", "addDevice");
+  setText("#exportDevicesExcelBtn span.mobile-hide", "exportExcel");
   setPlaceholder("#deviceSearchInput", "deviceSearchInputPlaceholder"); // Assuming key exists
   setText('th[data-sort-key="MaTaiSan"]', "deviceCode");
   setText('th[data-sort-key="TenTaiSan"]', "deviceName");
@@ -2988,8 +3252,8 @@ function applyTranslations() {
 
   // User List
   setText("#usersSection .table-title", "userListTitle");
-  setText("#addUserBtn", "addUser");
-  setText("#exportUsersExcelBtn", "exportExcel");
+  setText("#addUserBtn span.mobile-hide", "addUser");
+  setText("#exportUsersExcelBtn span.mobile-hide", "exportExcel");
   setPlaceholder("#userSearchInput", "userSearchInputPlaceholder"); // Assuming key exists
   setText('th[data-sort-key="MaNV"]', "employeeId");
   setText('th[data-sort-key="HoVaTen"]', "fullName");
@@ -3021,7 +3285,17 @@ function applyTranslations() {
       t("devicesThisYear") + " ";
   }
   document.querySelectorAll("[data-i18n]").forEach((el) => {
-    if (dict[el.dataset.i18n]) el.textContent = dict[el.dataset.i18n];
+    if (dict[el.dataset.i18n]) {
+      const icon = el.querySelector('i');
+      if (icon) {
+        Array.from(el.childNodes).forEach(node => {
+          if (node.nodeType === 3) node.remove();
+        });
+        el.insertBefore(document.createTextNode(dict[el.dataset.i18n] + " "), el.firstChild);
+      } else {
+        el.textContent = dict[el.dataset.i18n];
+      }
+    }
   });
 
   // Dịch các placeholder
@@ -3031,10 +3305,9 @@ function applyTranslations() {
   });
 
   // Modals
-  setText(
-    "#deviceModalTitle",
-    currentDeviceId ? "editDeviceModalTitle" : "addDeviceModalTitle",
-  );
+  setText('#deviceDetailModalTitle', 'deviceDetailsTitle');
+  setText('#addDeviceModalTitle', 'addDeviceModalTitle');
+  setText('#editDeviceModalTitle', 'editDeviceModalTitle');
   setText(
     "#userModalTitle",
     currentUserId ? "editUserModalTitle" : "addUserModalTitle",
@@ -3080,6 +3353,11 @@ function exportDevicesToExcel() {
     "Trangthai",
     "Nguoisudung",
     "Vitri", // 👈 THÊM CỘT VỊ TRÍ
+    "CauHinh", // 👈 THÊM CỘT CẤU HÌNH
+    "DonViTinh",
+    "ThoiGianBaoHanh",
+    "DonGia",
+    "NamSanXuat",
     "QRcode", // 👈 dùng cho Bartender
   ];
 
@@ -3093,6 +3371,11 @@ function exportDevicesToExcel() {
     Trangthai: d.Trangthai || "",
     Nguoisudung: d.Nguoisudung || "",
     Vitri: d.Vitri || "", // 👈 ĐẨY VỊ TRÍ RA EXCEL
+    CauHinh: d.CauHinh || "", // 👈 ĐẨY CẤU HÌNH RA EXCEL
+    DonViTinh: d.DonViTinh || "",
+    ThoiGianBaoHanh: d.ThoiGianBaoHanh || "",
+    DonGia: d.DonGia || "",
+    NamSanXuat: d.NamSanXuat || "",
     // URL dùng cho QR trong Bartender
     QRcode: buildDeviceDisplayUrl(d.MaTaiSan),
   }));
@@ -3152,9 +3435,15 @@ async function importDevicesFromExcel(file) {
           NgayNhap: r.NgayNhap || "",
           Trangthai: r.Trangthai || "Sẵn sàng",
           Nguoisudung: r.Nguoisudung || "",
+          Vitri: r.Vitri || "",
+          CauHinh: r.CauHinh || "",
+          DonViTinh: r.DonViTinh || "",
+          ThoiGianBaoHanh: r.ThoiGianBaoHanh || "",
+          DonGia: r.DonGia || "",
+          NamSanXuat: r.NamSanXuat || "",
         };
 
-        if (!payload.MaTaiSan || !payload.TenTaiSan) {
+        if (!payload.MaTaiSan) {
           fail++;
           continue;
         }
@@ -3913,4 +4202,296 @@ window.addEventListener("click", (e) => {
   if (e.target === roleModal) {
     roleModal.style.display = "none";
   }
+});
+
+// --- BẮT ĐẦU: CHI TIẾT TÀI SẢN E-COMMERCE TABS ---
+function openDeviceDetail(MaTaiSan) {
+  const device = devices.find(d => d.MaTaiSan === MaTaiSan);
+  if (!device) return;
+  const dict = translations[currentLang] || translations["vi"];
+
+  const rawImg = device.HinhAnhHienThi || device.HinhAnhThucTe;
+  let imageHtml = "";
+  if (rawImg && typeof rawImg === "string") {
+    const imgPath = encodeURI(rawImg.replace(/\\/g, "/"));
+    imageHtml = `<img src="${imgPath}" class="product-main-image" alt="Device Image" onerror="this.outerHTML='<div class=\\'no-image-placeholder\\'>No Image</div>'">`;
+  } else {
+    imageHtml = `<div class="no-image-placeholder">No Image</div>`;
+  }
+
+  const name = device.TenTaiSan || device.Model || "Không có tên";
+  const sku = device.MaTaiSan;
+  
+  const formattedDate = formatDate(device.NgayNhap);
+  const statusStr = getTranslatedStatus(device.Trangthai);
+  
+  const html = `
+    <div class="product-image-section">
+      ${imageHtml}
+    </div>
+    <div class="product-info-section">
+      <h2 class="product-title">${name}</h2>
+      <div class="product-sku">Mã TS: <strong>${sku}</strong></div>
+      
+      <div class="product-status-box" style="margin-bottom: 20px;">
+        <div class="product-status-title">${dict.currentStatus || "Trạng thái hiện tại"}</div>
+        <div class="product-status-value ${getStatusClass(device.Trangthai)}">${statusStr}</div>
+      </div>
+      
+      <h3 style="margin-top: 0; padding-bottom: 10px; border-bottom: 1px solid #eee; font-size: 1.1rem; color: #333;">${dict.detailedInfo || "Thông tin chi tiết"}</h3>
+      
+      <ul class="product-specs-list" style="margin-top: 15px;">
+        <li><i class="fas fa-layer-group" style="width: 20px; color: #555;"></i> <strong>${dict.deviceType || "Loại Tài Sản"}:</strong> ${device.LoaiTaiSan || "-"}</li>
+        <li><i class="fas fa-barcode" style="width: 20px; color: #555;"></i> <strong>${dict.serialNumber || "Serial/SN"}:</strong> ${device.SerialSN || "-"}</li>
+        <li><i class="fas fa-calendar" style="width: 20px; color: #555;"></i> <strong>${dict.productionYear || "Năm Sản Xuất"}:</strong> ${device.NamSanXuat || "-"}</li>
+        <li><i class="fas fa-user" style="width: 20px; color: #555;"></i> <strong>${dict.user || "Người sử dụng"}:</strong> ${device.Nguoisudung || "Chưa cấp"}</li>
+        <li><i class="fas fa-map-marker-alt" style="width: 20px; color: #555;"></i> <strong>${dict.location || "Vị trí"}:</strong> ${device.Vitri || "-"}</li>
+      </ul>
+
+      <h4 style="margin-top: 20px; margin-bottom: 10px; font-size: 1rem; color: #444;">${dict.configurationSpecs || "Cấu hình / Thông số:"}</h4>
+      <ul class="product-specs-list" id="detail-specs-list">
+        <!-- Render from JS -->
+      </ul>
+    </div>
+  `;
+
+  document.getElementById("deviceDetailContainer").innerHTML = html;
+  
+  // Render specs dynamically
+  const specsList = document.getElementById("detail-specs-list");
+  if (device.CauHinh && device.CauHinh.trim() !== "") {
+    let lines = [];
+    if (device.CauHinh.includes('\n')) {
+      // Nếu đã có dấu xuống dòng (nhấn Alt+Enter trong Excel), thì chẻ theo dấu xuống dòng
+      lines = device.CauHinh.split('\n');
+    } else {
+      // Nếu không có xuống dòng, thử thuật toán chẻ theo dấu phẩy thông minh
+      // Chỉ tách thành dòng mới nếu phần sau dấu phẩy có chứa dấu hai chấm ":" (tức là 1 thuộc tính mới)
+      const parts = device.CauHinh.split(', ');
+      let currentLine = parts[0];
+      for (let i = 1; i < parts.length; i++) {
+        if (parts[i].includes(':')) {
+          lines.push(currentLine);
+          currentLine = parts[i];
+        } else {
+          currentLine += ', ' + parts[i];
+        }
+      }
+      lines.push(currentLine);
+    }
+    
+    // Xóa các khoảng trắng thừa
+    lines = lines.map(l => l.trim()).filter(l => l !== "");
+    
+    // Dịch từng dòng cấu hình nếu có thư viện deviceSpecsTranslations.js
+    if (typeof translateSpecLine === 'function') {
+      lines = lines.map(line => translateSpecLine(line, currentLang));
+    }
+    
+    specsList.innerHTML = lines.map(line => `<li><i class="fas fa-check-circle"></i> <span>${line}</span></li>`).join('');
+  } else {
+    specsList.innerHTML = `<li><i class="fas fa-info-circle" style="color:#aaa"></i> <span style="color:#888">${dict.noSpecsUpdated || "Chưa cập nhật thông số"}</span></li>`;
+  }
+
+  document.getElementById("deviceDetailModal").style.display = "flex";
+}
+
+function switchDeviceTab(button, tabId) {
+  // Remove active class from all tabs
+  const tabs = button.parentElement.querySelectorAll('.product-tab');
+  tabs.forEach(tab => tab.classList.remove('active'));
+  
+  // Add active class to clicked tab
+  button.classList.add('active');
+  
+  // Hide all tab contents
+  const container = button.parentElement.parentElement;
+  const contents = container.querySelectorAll('.product-tab-content');
+  contents.forEach(content => content.classList.remove('active'));
+  
+  // Show target tab content
+  container.querySelector('#' + tabId).classList.add('active');
+}
+
+function closeDeviceDetailModal() {
+  document.getElementById("deviceDetailModal").style.display = "none";
+}
+
+window.addEventListener('click', function(e) {
+  if (e.target == document.getElementById("deviceDetailModal")) {
+    closeDeviceDetailModal();
+  }
+});
+// --- KẾT THÚC: CHI TIẾT TÀI SẢN E-COMMERCE TABS ---
+
+// --- BỘ LỌC CỘT (EXCEL STYLE) ---
+let tableColumnFilters = {}; // Lưu trữ: { "TenTaiSan": ["DAREU", "Acer"], "Trangthai": ["Sẵn sàng"] }
+let currentFilterColumn = null;
+
+// Lắng nghe click vào các icon filter
+document.addEventListener("click", (e) => {
+  if (e.target.classList.contains("column-filter-icon")) {
+    e.stopPropagation(); // Ngăn sort table
+    
+    // Đóng popup nếu click lại cùng 1 icon
+    const popup = document.getElementById("columnFilterPopup");
+    const isSameColumn = currentFilterColumn === e.target.dataset.col && popup.style.display === "block";
+    
+    if (isSameColumn) {
+      popup.style.display = "none";
+      currentFilterColumn = null;
+      return;
+    }
+    
+    currentFilterColumn = e.target.dataset.col;
+    
+    // Position popup
+    const rect = e.target.getBoundingClientRect();
+    popup.style.top = (rect.bottom + window.scrollY + 5) + "px";
+    popup.style.left = (rect.left + window.scrollX) + "px";
+    popup.style.display = "block";
+    
+    // Reset search
+    const searchInput = document.getElementById("columnFilterSearch");
+    if(searchInput) searchInput.value = "";
+    
+    // Render list
+    renderColumnFilterList();
+  } else if (!e.target.closest("#columnFilterPopup") && !e.target.classList.contains("column-filter-icon")) {
+    // Click outside -> close popup
+    const popup = document.getElementById("columnFilterPopup");
+    if(popup) popup.style.display = "none";
+    currentFilterColumn = null;
+  }
+});
+
+function getUniqueValuesForColumn(colKey) {
+  // Lấy dữ liệu cơ bản
+  let filtered = getBaseFilteredDevices();
+  if (currentTabStatus) {
+    filtered = filtered.filter((d) => d.Trangthai === currentTabStatus);
+  }
+  
+  // Lọc thêm các cột khác (trừ cột hiện tại)
+  for (const [key, selectedValues] of Object.entries(tableColumnFilters)) {
+    if (key !== colKey && selectedValues && selectedValues.length > 0) {
+      filtered = filtered.filter(d => selectedValues.includes(d[key] || ""));
+    }
+  }
+  
+  const uniqueValues = [...new Set(filtered.map(d => d[colKey] || ""))].sort();
+  return uniqueValues;
+}
+
+function renderColumnFilterList(searchTerm = "") {
+  if (!currentFilterColumn) return;
+  
+  const listContainer = document.getElementById("columnFilterList");
+  listContainer.innerHTML = "";
+  
+  const uniqueValues = getUniqueValuesForColumn(currentFilterColumn);
+  const selectedValues = tableColumnFilters[currentFilterColumn] || [];
+  const isAllSelected = selectedValues.length === 0 || selectedValues.length === uniqueValues.length; // rỗng nghĩa là chọn all
+  
+  const selectAllCb = document.getElementById("columnFilterSelectAll");
+  if(selectAllCb) selectAllCb.checked = isAllSelected;
+  
+  uniqueValues.forEach(val => {
+    // Determine the display value (translated if applicable)
+    let displayVal = val;
+    if (val === "") {
+      displayVal = (typeof translations !== 'undefined' && translations[currentLang] && translations[currentLang].empty) ? translations[currentLang].empty : "(Trống)";
+    } else {
+      // For status, try dict lookup first
+      const dict = (typeof translations !== 'undefined' && translations[currentLang]) ? translations[currentLang] : null;
+      if (dict && dict[val]) {
+        displayVal = dict[val];
+      } else if (currentFilterColumn === 'Trangthai' && dict) {
+        if (val === 'Sẵn sàng') displayVal = dict.status_available || val;
+        if (val === 'Đang sử dụng') displayVal = dict.status_inUse || val;
+        if (val === 'Bảo Hành') displayVal = dict.status_warranty || val;
+        if (val === 'Hư Hỏng') displayVal = dict.status_broken || val;
+      } else if (typeof translateSpecLine === 'function') {
+        // Try to use the spec translator for other values (like CauHinh or LoaiTaiSan)
+        displayVal = translateSpecLine(val, currentLang);
+      }
+    }
+
+    if (searchTerm && !displayVal.toString().toLowerCase().includes(searchTerm.toLowerCase()) && !val.toString().toLowerCase().includes(searchTerm.toLowerCase())) return;
+    
+    const isChecked = isAllSelected || selectedValues.includes(val);
+    const div = document.createElement("div");
+    div.className = "filter-checkbox-item";
+    div.innerHTML = `
+      <label style="display: flex; align-items: center; cursor: pointer; width: 100%;">
+        <input type="checkbox" value="${val}" ${isChecked ? 'checked' : ''} class="column-filter-cb" />
+        <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${displayVal}">${displayVal}</span>
+      </label>
+    `;
+    listContainer.appendChild(div);
+  });
+}
+
+// Xử lý ô search trong popup
+document.getElementById("columnFilterSearch")?.addEventListener("input", (e) => {
+  renderColumnFilterList(e.target.value);
+});
+
+// Xử lý nút Select All
+document.getElementById("columnFilterSelectAll")?.addEventListener("change", (e) => {
+  const isChecked = e.target.checked;
+  const checkboxes = document.querySelectorAll(".column-filter-cb");
+  checkboxes.forEach(cb => cb.checked = isChecked);
+});
+
+// Xử lý nút OK
+document.getElementById("columnFilterOkBtn")?.addEventListener("click", () => {
+  if (!currentFilterColumn) return;
+  
+  const checkboxes = document.querySelectorAll(".column-filter-cb");
+  const isSelectAllChecked = document.getElementById("columnFilterSelectAll").checked;
+  const searchTerm = document.getElementById("columnFilterSearch").value;
+  
+  let selected = [];
+  checkboxes.forEach(cb => {
+    if (cb.checked) selected.push(cb.value);
+  });
+  
+  const allUnique = getUniqueValuesForColumn(currentFilterColumn);
+
+  // Xử lý lưu state
+  if (!searchTerm && (isSelectAllChecked || selected.length === allUnique.length)) {
+    tableColumnFilters[currentFilterColumn] = []; // Xoá filter
+  } else {
+    // Lấy đúng những giá trị được check (cho dù có search hay không)
+    tableColumnFilters[currentFilterColumn] = selected;
+  }
+  
+  // Cập nhật UI icon (thêm class active nếu có filter)
+  document.querySelectorAll(".column-filter-icon").forEach(icon => {
+    const col = icon.dataset.col;
+    if (tableColumnFilters[col] && tableColumnFilters[col].length > 0) {
+      icon.classList.add("active");
+      icon.style.color = "#007bff";
+    } else {
+      icon.classList.remove("active");
+      icon.style.color = "";
+    }
+  });
+  
+  document.getElementById("columnFilterPopup").style.display = "none";
+  currentFilterColumn = null;
+  deviceCurrentPage = 1;
+  applyFiltersAndRender();
+});
+
+// Xử lý nút Cancel
+document.getElementById("columnFilterCancelBtn")?.addEventListener("click", () => {
+  document.getElementById("columnFilterPopup").style.display = "none";
+  currentFilterColumn = null;
+});
+
+// Ngăn đóng popup khi click bên trong
+document.getElementById("columnFilterPopup")?.addEventListener("click", (e) => {
+  e.stopPropagation();
 });

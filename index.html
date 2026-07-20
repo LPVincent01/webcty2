@@ -20,13 +20,18 @@
 <body>
   <!-- Login Page -->
   <div class="login-container" id="loginPage">
+    <!-- App Switcher Top Right -->
+    <div style="position: absolute; top: 20px; right: 20px; z-index: 1000; display: flex; gap: 10px; background: rgba(255,255,255,0.2); padding: 5px; border-radius: 8px; backdrop-filter: blur(10px);">
+      <a href="index.html" style="padding: 8px 15px; border-radius: 6px; text-decoration: none; font-weight: bold; background: #3498db; color: white; border: 1px solid #3498db;">Tài sản cố định</a>
+      <a href="vpp.html" style="padding: 8px 15px; border-radius: 6px; text-decoration: none; font-weight: bold; background: transparent; color: #333; border: 1px solid rgba(0,0,0,0.1);">Văn phòng phẩm</a>
+    </div>
+
     <!-- Logo góc trái trên cùng -->
     <div class="login-logo">
       <img src="styleimage/LOGO.JPG" alt="Springtex logo" />
     </div>
-    <!-- thêm id="loginForm" và class hidden -->
     <div class="login-form hidden" id="loginForm">
-      <h1>Đăng nhập Hệ Thống EAM</h1>
+      <h1>Đăng nhập</h1>
       <div class="form-group">
         <label for="username">Tài khoản</label>
         <input type="text" id="username" placeholder="Nhập tài khoản" />
@@ -84,7 +89,8 @@
           alt="User Avatar" />
         <span id="currentUserText" class="current-user-text">Chưa đăng nhập</span>
 
-        <!-- NÚT LÀM MỚI DỮ LIỆU -->
+
+        <!-- Nút Làm Mới -->
         <button class="refresh-btn" id="refreshDataBtn">
           <i class="fas fa-rotate-right"></i>
           Restore
@@ -612,7 +618,7 @@
               <div class="table-actions">
                 <button class="btn btn-primary" id="addPurchaseBtn">
                   <i class="fas fa-plus"></i>
-                  <span class="mobile-hide" data-i18n="addPurchaseInfo">Thêm thông tin mua hàng</span>
+                  <span class="mobile-hide">Thêm mới</span>
                 </button>
                 <button class="btn btn-success" id="exportPurchasesExcelBtn">
                   <i class="fas fa-file-excel"></i>
@@ -1156,10 +1162,10 @@
   </div>
 
   <!-- Scripts -->
-  <script src="./translations.js?v=3"></script>
+  <script src="./translations.js?v=2"></script>
   <script src="./deviceSpecsTranslations.js?v=2"></script>
   <link rel="stylesheet" href="./style.css?v=9" />
-  <script src="./script.js?v=20"></script>
+  <script src="./script.js?v=19"></script>
 </body>
 
 </html>

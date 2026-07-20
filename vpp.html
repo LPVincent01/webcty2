@@ -1,0 +1,336 @@
+<!doctype html>
+<html lang="vi">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Quản Lý Văn Phòng Phẩm</title>
+
+  <!-- Icons & Chart -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="./style.css" />
+  <link rel="stylesheet" href="./vpp.css" />
+</head>
+
+<body>
+  <!-- Login Page (Dùng chung style) -->
+  <div class="login-container" id="loginPage">
+    <!-- App Switcher Top Right -->
+    <div style="position: absolute; top: 20px; right: 20px; z-index: 1000; display: flex; gap: 10px; background: rgba(255,255,255,0.2); padding: 5px; border-radius: 8px; backdrop-filter: blur(10px);">
+      <a href="index.html" style="padding: 8px 15px; border-radius: 6px; text-decoration: none; font-weight: bold; background: transparent; color: #333; border: 1px solid rgba(0,0,0,0.1);">Tài sản cố định</a>
+      <a href="vpp.html" style="padding: 8px 15px; border-radius: 6px; text-decoration: none; font-weight: bold; background: #3498db; color: white; border: 1px solid #3498db;">Văn phòng phẩm</a>
+    </div>
+
+    <div class="login-logo">
+      <img src="styleimage/LOGO.JPG" alt="Springtex logo" />
+    </div>
+    <div class="login-form hidden" id="loginForm">
+      <h1>Đăng nhập</h1>
+      <div class="form-group">
+        <label for="username">Tài khoản</label>
+        <input type="text" id="username" placeholder="Nhập tài khoản" />
+      </div>
+      <div class="form-group">
+        <label for="password">Mật khẩu</label>
+        <div class="password-wrapper">
+          <input type="password" id="password" placeholder="Nhập mật khẩu" />
+          <i class="fas fa-eye" id="togglePassword"></i>
+        </div>
+      </div>
+      <button class="login-btn" id="loginBtn">Đăng nhập</button>
+    </div>
+  </div>
+
+  <!-- Main Application -->
+  <div class="app-container" id="appContainer" style="display: none">
+    <header class="header">
+      <div style="width: 150px;"></div> <!-- Spacer để cân bằng với user-menu -->
+      <h1 style="text-align: center; flex: 1;">Quản Lý Văn Phòng Phẩm</h1>
+      <div class="user-menu" style="min-width: 150px; justify-content: flex-end;">
+        <img id="userAvatar" src="https://ui-avatars.com/api/?name=User&background=3498db&color=fff" alt="User Avatar" />
+        <span id="currentUserText" class="current-user-text">Chưa đăng nhập</span>
+        <button class="refresh-btn" id="refreshVppBtn" style="margin-left:10px; background-color: #3498db; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; display: flex; align-items: center; gap: 5px; height: 35px;">
+          <i class="fas fa-rotate-right"></i> Restore
+        </button>
+        <button class="logout-btn" id="logoutBtn" style="margin-left:10px;">
+          Đăng xuất <i class="fas fa-sign-out-alt"></i>
+        </button>
+      </div>
+    </header>
+
+    <div class="main-content">
+      <aside class="sidebar">
+        <ul class="sidebar-menu">
+          <li>
+            <a href="#" class="active" data-section="list">
+              <i class="fa-solid fa-boxes-stacked icon-blue"></i>
+              <span>Văn phòng phẩm</span>
+            </a>
+          </li>
+          <li>
+            <a href="#" data-section="import">
+              <i class="fa-solid fa-cart-arrow-down icon-green"></i>
+              <span>Nhập Kho</span>
+            </a>
+          </li>
+          <li>
+            <a href="#" data-section="export">
+              <i class="fa-solid fa-hand-holding-box icon-orange"></i>
+              <span>Xuất Kho</span>
+            </a>
+          </li>
+          <li>
+            <a href="#" data-section="history">
+              <i class="fa-solid fa-clock-rotate-left icon-yellow"></i>
+              <span>Lịch Sử Nhập/Xuất Kho</span>
+            </a>
+          </li>
+        </ul>
+      </aside>
+
+      <main class="content-area">
+        <!-- Section: Danh mục VPP -->
+        <section class="content-section" id="vpp-listSection">
+          <div class="section-header">
+            <div>
+              <h2 class="section-title">Danh Mục Văn Phòng Phẩm</h2>
+              <p class="section-description">Quản lý danh sách các vật tư, số lượng tồn kho</p>
+            </div>
+            <button class="btn btn-primary" id="addVppBtn"><i class="fas fa-plus"></i> Thêm VPP mới</button>
+          </div>
+          <div class="table-container">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th style="width: 50px;">STT</th>
+                  <th style="width: 80px;">HÌNH ẢNH</th>
+                  <th style="width: 100px;">MÃ VPP</th>
+                  <th style="width: 200px;">TÊN VẬT TƯ</th>
+                  <th style="width: 70px;">ĐVT</th>
+                  <th style="width: 80px;">TỒN KHO</th>
+                  <th style="width: 100px;">ĐƠN GIÁ</th>
+                  <th style="width: 120px;">ĐƠN GIÁ (VAT)</th>
+                  <th style="width: 120px;">THÀNH TIỀN</th>
+                  <th>GHI CHÚ</th>
+                  <th style="width: 80px;">THAO TÁC</th>
+                </tr>
+              </thead>
+              <tbody id="vppTableBody">
+                <!-- Data injected by JS -->
+              </tbody>
+            </table>
+            <div id="vppPagination" style="margin-top: 15px; display: flex; justify-content: flex-end; gap: 5px;">
+              <!-- Pagination injected by JS -->
+            </div>
+          </div>
+        </section>
+
+        <!-- Section: Nhập hàng -->
+        <section class="content-section" id="vpp-importSection" style="display: none;">
+          <div class="section-header">
+            <div>
+              <h2 class="section-title">Nhập Hàng Văn Phòng Phẩm</h2>
+              <p class="section-description">Nhập số lượng lớn vật tư vào kho</p>
+            </div>
+            <button class="btn btn-success" id="saveImportBtn"><i class="fas fa-save"></i> Lưu Phiếu Nhập</button>
+          </div>
+          <div class="table-container" style="overflow-x: auto;">
+            <table class="data-table import-table">
+              <thead>
+                <tr>
+                  <th style="width: 50px;">STT</th>
+                  <th style="width: 120px;">MÃ VPP</th>
+                  <th style="width: 250px;">TÊN VẬT TƯ</th>
+                  <th style="width: 80px;">ĐVT</th>
+                  <th style="width: 80px;">SL</th>
+                  <th style="width: 120px;">ĐƠN GIÁ</th>
+                  <th style="width: 80px;">VAT</th>
+                  <th style="width: 120px;">ĐƠN GIÁ VAT</th>
+                  <th style="width: 150px;">THÀNH TIỀN</th>
+                  <th>GHI CHÚ</th>
+                  <th style="width: 50px;">Xóa</th>
+                </tr>
+              </thead>
+              <tbody id="importTableBody">
+                <!-- Rows injected by JS -->
+              </tbody>
+            </table>
+            <button class="btn btn-outline" id="addImportRowBtn" style="margin-top: 10px;"><i class="fas fa-plus"></i> Thêm dòng</button>
+          </div>
+        </section>
+        
+        <!-- Section: Xuất kho -->
+        <section class="content-section" id="vpp-exportSection" style="display: none;">
+          <div class="section-header">
+            <div>
+              <h2 class="section-title">Xuất Kho Văn Phòng Phẩm</h2>
+              <p class="section-description">Cấp phát vật tư cho nhân viên/phòng ban</p>
+            </div>
+            <button class="btn btn-warning" id="saveExportBtn"><i class="fas fa-hand-holding-box"></i> Lưu Phiếu Xuất</button>
+          </div>
+          <div class="table-container" style="overflow-x: auto;">
+            <table class="data-table import-table">
+              <thead>
+                <tr>
+                  <th style="width: 50px;">STT</th>
+                  <th style="width: 120px;">MÃ VPP</th>
+                  <th style="width: 250px;">TÊN VẬT TƯ</th>
+                  <th style="width: 80px;">ĐVT</th>
+                  <th style="width: 100px;">TỒN KHO</th>
+                  <th style="width: 100px;">SL XUẤT</th>
+                  <th style="width: 200px;">NGƯỜI NHẬN</th>
+                  <th>GHI CHÚ</th>
+                  <th style="width: 50px;">Xóa</th>
+                </tr>
+              </thead>
+              <tbody id="exportTableBody">
+                <!-- Rows injected by JS -->
+              </tbody>
+            </table>
+            <button class="btn btn-outline" id="addExportRowBtn" style="margin-top: 10px;"><i class="fas fa-plus"></i> Thêm dòng</button>
+          </div>
+        </section>
+
+        <!-- Section: Lịch sử giao dịch -->
+        <section class="content-section" id="vpp-historySection" style="display: none;">
+          <div class="section-header">
+            <div>
+              <h2 class="section-title">Lịch sử nhập/xuất kho</h2>
+              <p class="section-description">Xem lại các lần nhập/xuất kho</p>
+            </div>
+            <button class="btn btn-primary" id="refreshHistoryBtn"><i class="fas fa-sync-alt"></i> Làm mới</button>
+          </div>
+          <div class="table-container">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Mã VPP</th>
+                  <th>Loại</th>
+                  <th>Tên Vật Tư</th>
+                  <th>Số Lượng</th>
+                  <th>Đơn Giá</th>
+                  <th>Đơn Giá (VAT)</th>
+                  <th>Thành Tiền</th>
+                  <th>Người Thực Hiện</th>
+                  <th>Người Nhận</th>
+                  <th>Ghi chú</th>
+                  <th>Thời gian</th>
+                </tr>
+              </thead>
+              <tbody id="historyTableBody">
+                <!-- Rows injected by JS -->
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+      </main>
+    </div>
+  </div>
+
+  <!-- Modal Thêm VPP -->
+  <div id="addVppModal" class="modal" style="display: none;">
+    <div class="modal-content" style="max-width: 700px; margin: 8% auto; padding: 25px; background: #fff; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.2);">
+      <div class="modal-header" style="display: flex; justify-content: space-between; border-bottom: 2px solid #eee; padding-bottom: 15px; margin-bottom: 20px;">
+        <h3 style="margin: 0; color: #2c3e50; font-size: 1.5rem;">Thêm Văn Phòng Phẩm Mới</h3>
+        <span class="close" id="closeAddVppModal" style="cursor: pointer; font-size: 1.8rem; color: #999; line-height: 1;">&times;</span>
+      </div>
+      <div class="modal-body" style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+        <!-- Cột 1 -->
+        <div>
+          <div class="form-group" style="margin-bottom: 15px;">
+            <label style="font-weight: 600; color: #444; margin-bottom: 5px; display: block;">Mã VPP (Tuỳ chọn)</label>
+            <input type="text" id="newVppCode" class="form-control" style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px;" placeholder="VD: B001">
+          </div>
+          <div class="form-group" style="margin-bottom: 15px;">
+            <label style="font-weight: 600; color: #444; margin-bottom: 5px; display: block;">Tên Vật Tư <span style="color:#e74c3c">*</span></label>
+            <input type="text" id="newVppName" class="form-control" style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px;" placeholder="VD: Bút bi Thiên Long">
+          </div>
+          <div class="form-group" style="margin-bottom: 15px;">
+            <label style="font-weight: 600; color: #444; margin-bottom: 5px; display: block;">Đơn Vị Tính</label>
+            <input type="text" id="newVppUnit" class="form-control" style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px;" placeholder="VD: Cái, Hộp, Ram">
+          </div>
+        </div>
+        <!-- Cột 2 -->
+        <div>
+          <div class="form-group" style="margin-bottom: 15px;">
+            <label style="font-weight: 600; color: #444; margin-bottom: 5px; display: block;">Thương Hiệu / Hãng (Tùy chọn)</label>
+            <input type="text" id="newVppBrand" class="form-control" style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px;" placeholder="VD: Thiên Long, Plus">
+          </div>
+          <div class="form-group" style="margin-bottom: 15px;">
+            <label style="font-weight: 600; color: #444; margin-bottom: 5px; display: block;">Nhà Cung Cấp (Tùy chọn)</label>
+            <input type="text" id="newVppSupplier" class="form-control" style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px;" placeholder="VD: Cty ABC">
+          </div>
+          <div class="form-group" style="margin-bottom: 15px;">
+            <label style="font-weight: 600; color: #444; margin-bottom: 5px; display: block;">Ghi Chú Khác</label>
+            <input type="text" id="newVppNote" class="form-control" style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px;" placeholder="Ghi chú thêm...">
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer" style="text-align: right; margin-top: 20px;">
+        <button class="btn btn-secondary" id="cancelAddVppBtn" style="padding: 8px 15px; margin-right: 10px;">Huỷ</button>
+        <button class="btn btn-primary" id="saveAddVppBtn" style="padding: 8px 15px; background: #3498db; color: #fff; border: none; border-radius: 4px;">Lưu lại</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Sửa VPP -->
+  <div id="editVppModal" class="modal" style="display: none;">
+    <div class="modal-content" style="max-width: 800px; margin: 5% auto; padding: 25px; background: #fff; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.2);">
+      <div class="modal-header" style="display: flex; justify-content: space-between; border-bottom: 2px solid #eee; padding-bottom: 15px; margin-bottom: 20px;">
+        <h3 style="margin: 0; color: #2c3e50; font-size: 1.5rem;">Chỉnh Sửa Văn Phòng Phẩm</h3>
+        <span class="close" id="closeEditVppModal" style="cursor: pointer; font-size: 1.8rem; color: #999; line-height: 1;">&times;</span>
+      </div>
+      <div class="modal-body" style="display: grid; grid-template-columns: 1fr 2fr; gap: 30px;">
+        <!-- Cột Trái: Hình ảnh -->
+        <div style="text-align: center;">
+          <label style="font-weight: 600; color: #444; margin-bottom: 10px; display: block;">Hình Ảnh</label>
+          <div id="editVppImgContainer" tabindex="0" title="Nhấn vào đây và ấn Ctrl+V để dán ảnh mới" style="width: 100%; aspect-ratio: 1; border: 2px dashed #ccc; border-radius: 8px; display: flex; align-items: center; justify-content: center; overflow: hidden; cursor: pointer; position: relative; background: #f9f9f9;">
+            <img id="editVppImagePreview" src="" style="width: 100%; height: 100%; object-fit: contain; display: none; background-color: #fff;">
+            <div id="editVppImagePlaceholder" style="color: #888; font-size: 14px; padding: 20px;">
+              <i class="fas fa-image" style="font-size: 3rem; margin-bottom: 10px; color: #ccc;"></i><br>
+              Nhấn vào đây và nhấn Ctrl+V để dán ảnh
+            </div>
+          </div>
+          <input type="hidden" id="editVppId">
+          <input type="hidden" id="editVppImageBase64">
+        </div>
+        <!-- Cột Phải: Thông tin -->
+        <div>
+          <div class="form-group" style="margin-bottom: 15px;">
+            <label style="font-weight: 600; color: #444; margin-bottom: 5px; display: block;">Tên Vật Tư <span style="color:#e74c3c">*</span></label>
+            <input type="text" id="editVppName" class="form-control" style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px;">
+          </div>
+          <div class="form-group" style="margin-bottom: 15px;">
+            <label style="font-weight: 600; color: #444; margin-bottom: 5px; display: block;">Đơn Vị Tính</label>
+            <input type="text" id="editVppUnit" class="form-control" style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px;">
+          </div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+            <div class="form-group" style="margin-bottom: 15px;">
+              <label style="font-weight: 600; color: #444; margin-bottom: 5px; display: block;">Đơn Giá (VNĐ)</label>
+              <input type="number" id="editVppPrice" class="form-control" style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px;">
+            </div>
+            <div class="form-group" style="margin-bottom: 15px;">
+              <label style="font-weight: 600; color: #444; margin-bottom: 5px; display: block;">VAT (%)</label>
+              <input type="number" id="editVppVat" class="form-control" style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px;">
+            </div>
+          </div>
+          <div class="form-group" style="margin-bottom: 15px;">
+            <label style="font-weight: 600; color: #444; margin-bottom: 5px; display: block;">Đơn Giá Sau VAT (VNĐ)</label>
+            <input type="number" id="editVppPriceVat" class="form-control" style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; background: #e9ecef;" readonly>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer" style="margin-top: 25px; text-align: right; border-top: 1px solid #eee; padding-top: 15px;">
+        <button class="btn btn-secondary" id="cancelEditVppBtn" style="margin-right: 10px; padding: 10px 20px;">Hủy</button>
+        <button class="btn btn-success" id="saveEditVppBtn" style="padding: 10px 20px;"><i class="fas fa-save"></i> Lưu Thay Đổi</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="vpp.js"></script>
+</body>
+</html>

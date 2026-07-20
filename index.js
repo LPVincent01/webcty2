@@ -25,6 +25,11 @@ const config = {
   },
 };
 
+const configVPP = {
+  ...config,
+  database: "QuanLyVanPhongPham"
+};
+
 /* ============== MIDDLEWARE CHUNG ============== */
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
@@ -142,6 +147,49 @@ app.post("/api/login", async (req, res) => {
     });
   } catch (err) {
     handleSqlError(res, err);
+  }
+});
+
+// API Đăng nhập cho VPP (Dùng DB QuanLyVanPhongPham)
+app.post("/api/vpp/login", async (req, res) => {
+  const { username, password } = req.body || {};
+  if (!username || !password) return res.status(400).send("Thiếu thông tin đăng nhập");
+  
+  try {
+    const pool = await vppPoolPromise;
+    const result = await pool.request()
+      .input('Username', sql.VarChar, username)
+      .query('SELECT * FROM dbo.TAIKHOAN WHERE Username = @Username');
+      
+    const user = result.recordset[0];
+    if (!user) return res.status(401).send("Sai tài khoản hoặc mật khẩu");
+    
+    let isMatch = false;
+    if (user.PasswordHash.startsWith("$2")) {
+      isMatch = await bcrypt.compare(password, user.PasswordHash);
+    } else {
+      isMatch = password === user.PasswordHash;
+    }
+    
+    if (!isMatch) return res.status(401).send("Sai tài khoản hoặc mật khẩu");
+    
+    const token = makeToken();
+    TOKENS.set(token, {
+      username: user.Username,
+      role: user.Role,
+      displayName: user.Username,
+      expiresAt: Date.now() + TOKEN_TTL,
+    });
+    
+    return res.json({
+      token,
+      role: user.Role,
+      username: user.Username,
+      displayName: user.Username,
+    });
+  } catch (err) {
+    console.error("VPP Login Error:", err);
+    res.status(500).send("Lỗi server khi đăng nhập");
   }
 });
 
@@ -313,7 +361,26 @@ function authorizeAdmin(req, res, next) {
 /* ====== KẾT NỐI SQL POOL + START ====== */
 const poolPromise = new sql.ConnectionPool(config)
   .connect()
-  .then(async (pool) => {
+  .then((pool) => {
+    console.log("✅ Kết nối SQL Server thành công (QuanLyThietBi)");
+    return pool;
+  })
+  .catch((err) => {
+    console.error("❌ Kết nối CSDL thất bại (QuanLyThietBi): ", err);
+    process.exit(1);
+  });
+
+const vppPoolPromise = new sql.ConnectionPool(configVPP)
+  .connect()
+  .then((pool) => {
+    console.log("✅ Kết nối SQL Server thành công (QuanLyVanPhongPham)");
+    return pool;
+  })
+  .catch((err) => {
+    console.error("❌ Kết nối CSDL thất bại (QuanLyVanPhongPham): ", err);
+  });
+
+  poolPromise.then(async (pool) => {
     console.log("✅ Kết nối SQL Server thành công");
 
     // (Re)create CHECK constraints để có 'Hư Hỏng'
@@ -538,6 +605,9 @@ const poolPromise = new sql.ConnectionPool(config)
       .catch((e) =>
         console.warn("⚠️ Không thể tạo bảng kiểm kê:", e?.message || e),
       );
+
+    // --- Tích hợp các route VPP ---
+    app.use('/api/vpp', require('./vppRoutes')(vppPoolPromise, authenticate));
 
     app.listen(PORT, HOST, () =>
       console.log(`🚀 Server chạy tại http://${HOST}:${PORT}`),

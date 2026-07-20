@@ -1,0 +1,59 @@
+/* VPP Specific Styles */
+
+/* Header & Sidebar overrides if any */
+.header h1 {
+  color: #3498db;
+}
+
+/* Data Tables */
+.table-container {
+  background: white;
+  padding: 15px;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.data-table th, .data-table td {
+  padding: 10px;
+  border: 1px solid #dee2e6;
+  text-align: left;
+}
+
+.data-table th {
+  background: #f8f9fa;
+  font-weight: 600;
+}
+
+/* Import Form specific styles */
+.import-table th {
+  background: #3498db;
+  color: white;
+  text-align: center;
+}
+
+.import-table td {
+  padding: 5px;
+}
+
+.import-table .form-control {
+  border: 1px solid #ccc;
+  padding: 6px;
+  border-radius: 4px;
+  box-sizing: border-box;
+}
+
+.import-table .form-control:focus {
+  outline: none;
+  border-color: #3498db;
+  box-shadow: 0 0 5px rgba(52,152,219,0.3);
+}
+
+.btn-sm {
+  padding: 4px 8px;
+  font-size: 0.8rem;
+}
