@@ -60,7 +60,7 @@ body {
   height: 100vh;
   position: relative;
   /* dùng hình showroom */
-  background: #000 url("styleimage/springtex.png") center/cover no-repeat fixed;
+  background: #000 url("/shared/styleimage/springtex.png") center/cover no-repeat fixed;
 }
 /* lớp phủ làm tối nền để chữ và form nổi bật hơn */
 .login-container::before {

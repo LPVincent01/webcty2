@@ -7,11 +7,14 @@ const translations = {
     productionYear: "Năm sản xuất",
     configurationSpecs: "Cấu hình / Thông số:",
     noSpecsUpdated: "Chưa cập nhật thông số",
-    purchasePrice: "Thành tiền (VND)",
+    purchaseDate: "Ngày nhập",
+    unitPrice: "Đơn giá",
+    vatRate: "VAT",
+    purchasePrice: "Đơn giá (VAT)",
     purchaseSource: "Nguồn mua",
     appTitle: "Quản Lý Tài Sản Cố Định",
     // Login
-    purchaseListTitle: "Lịch sử mua hàng",
+    purchaseListTitle: "Thông tin mua hàng",
     login: "Đăng nhập",
     selectDevice: "Chọn tài sản...",
     username: "Tài khoản",
@@ -61,7 +64,7 @@ const translations = {
     serialNumber: "Serial(S/N)",
     importDate: "Ngày nhập",
     status: "Trạng thái",
-    amount: "Thành tiền",
+    amount: "Đơn giá (VAT)",
     user: "Người sử dụng",
     location: "Vị trí",
     actions: "Thao tác",
@@ -327,6 +330,7 @@ const translations = {
     addPurchase: "Thêm",
     // --- [THÊM MỚI] QUẢN LÝ TÀI KHOẢN ---
     accountManagement: "Quản lý tài khoản",
+    purchaseList: "Thông tin mua hàng",
     accountListTitle: "Quản lý tài khoản hệ thống",
     addAccount: "Thêm tài khoản",
 
@@ -364,6 +368,71 @@ const translations = {
     prefix_VEH: "VEH (Phương tiện)",
     prefix_MGTE: "MGTE (Quản lý)",
     prefix_MCH: "MCH (Máy móc)",
+
+    // Layout & UI
+    clearFilter: "Xóa bộ lọc",
+    restore: "Làm mới",
+    fixedAssets: "Tài sản cố định",
+    officeSupplies: "Văn phòng phẩm",
+
+    // Device Modal - missing labels
+    locationLabel: "Vị trí",
+    unitOfMeasure: "Đơn vị tính",
+    unitPriceVND: "Đơn giá (VND)",
+    warrantyPeriod: "Thời gian bảo hành (tháng)",
+    configSpecs: "Cấu hình / Thông số kỹ thuật",
+
+    // Alert - missing
+    alert_select_device: "Vui lòng chọn tài sản",
+
+    // Account Modal - missing
+    acc_role_manager: "Manager (Quản lý)",
+    permissionDetails: "Chi tiết quyền (chỉ áp dụng cho User/Manager)",
+    perm_add: "Thêm",
+    perm_edit: "Sửa",
+    perm_delete: "Xóa",
+    perm_confirm: "Khóa (Xác nhận)",
+
+    // Role Modal
+    roleModalTitle: "Phân chia lại quyền hạn",
+    selectedAccount: "Tài khoản đang chọn:",
+    newRole: "Cấp quyền mới",
+    saveNewRole: "Lưu quyền mới",
+
+    // Column Filter Popup
+    columnFilterSelectAll: "(Chọn tất cả)",
+    columnFilterOk: "OK",
+    columnFilterCancel: "Hủy",
+    columnFilterSearch: "Tìm kiếm",
+
+    // Confirm dialogs
+    confirm_lock_purchase: "Bạn có chắc chắn muốn khóa thông tin mua hàng này không?",
+    confirm_unlock_purchase: "Bạn có chắc chắn muốn mở khóa thông tin mua hàng này không?",
+    confirm_delete_rows: "Bạn có chắc chắn muốn xóa {n} dòng đã chọn?",
+    confirm_lock_rows: "Bạn có chắc chắn muốn khóa {n} dòng đã chọn?",
+    confirm_unlock_rows: "Bạn có chắc chắn muốn mở khóa {n} dòng đã chọn?",
+    alert_action_success: "Thao tác thành công",
+
+    // More alerts
+    alert_no_data_in_file: "Không có dữ liệu trong file",
+    alert_import_device_success: "Nhập thiết bị thành công ✔️",
+    alert_login_before_refresh: "Vui lòng đăng nhập trước khi làm mới dữ liệu ❗",
+    alert_refresh_success: "Đã tải lại dữ liệu và cập nhật các biểu đồ ✔️",
+    alert_invalid_unit_price: "Đơn giá không hợp lệ. Vui lòng nhập số nguyên khác 0.",
+    alert_empty_source: "Có thông tin để trống, vui lòng nhập thông tin Nguồn mua.",
+    alert_source_uppercase: "Thông tin nhập vào phải là chữ In Hoa",
+    alert_missing_id: "Không thể xóa bản ghi này vì dữ liệu bị thiếu ID!",
+    alert_device_match: "Thông tin chính xác, vui lòng chọn Mã tài sản phù hợp",
+    alert_device_no_match: "Thông tin chưa chính xác, vui lòng nhập lại",
+    alert_excel_no_data: "File Excel không có dữ liệu.",
+    alert_excel_missing_cols: "Thiếu các cột: ",
+    alert_excel_read_error: "Không thể đọc file Excel.",
+    alert_username_too_short: "Tên đăng nhập quá ngắn!",
+    alert_create_account_success: "Tạo tài khoản thành công ✔️",
+    alert_delete_account_success: "Đã xóa tài khoản.",
+    alert_role_change_success: "Đã phân chia lại quyền hạn thành công ✔️",
+    admin_system_role: "Quản trị viên hệ thống",
+    unlock: "Mở khóa",
   },
 
   // Tiếng Trung
@@ -373,8 +442,10 @@ const translations = {
     detailedInfo: "详细信息",
     productionYear: "生产年份",
     configurationSpecs: "配置/参数:",
-    noSpecsUpdated: "尚未更新参数",
-    purchasePrice: "金额 (VND)",
+    purchaseDate: "入库日期",
+    unitPrice: "单价",
+    vatRate: "增值税",
+    purchasePrice: "单价 (VAT)",
     purchaseSource: "采购来源",
     selectDevice: "选择资产...",
     appTitle: "固定资产管理",
@@ -396,7 +467,7 @@ const translations = {
     deviceSearchInputPlaceholder: "按资产代码/名称搜索",
     userSearchInputPlaceholder: "按员工号/姓名搜索",
     userList: "用户列表",
-    purchaseList: "采购历史",
+    purchaseList: "采购信息",
     statisticsChart: "统计图表",
     overviewTitle: "总览",
     overviewDescription: "资产系统总体统计",
@@ -421,8 +492,8 @@ const translations = {
     serialNumber: "序列号(S/N)",
     importDate: "入库日期",
     status: "状态",
-    amount: "金额",
-    purchaseListTitle: "采购历史",
+    amount: "单价 (VAT)",
+    purchaseListTitle: "采购信息",
     user: "使用人",
     location: "位置", // hoặc “放置位置” nếu bạn muốn rõ hơn
     actions: "操作",
@@ -690,7 +761,7 @@ const translations = {
 
     filterCondition1: "-- 条件 1 --",
     filterCondition2: "-- 条件 2 --",
-    btnSearchExecute: "执行",
+    btnSearchExecute: "查询",
     tabAll: "全部",
 
     // THÊM ĐOẠN NÀY CHO TIẾNG TRUNG
@@ -699,5 +770,71 @@ const translations = {
     prefix_VEH: "VEH (运输)",
     prefix_MGTE: "MGTE (管理)",
     prefix_MCH: "MCH (机械)",
+
+    // Layout & UI
+    clearFilter: "清除筛选",
+    restore: "恢复",
+    fixedAssets: "固定资产",
+    officeSupplies: "办公用品",
+
+    // Device Modal - missing labels
+    noSpecsUpdated: "尚未更新参数",
+    locationLabel: "位置",
+    unitOfMeasure: "计量单位",
+    unitPriceVND: "单价 (VND)",
+    warrantyPeriod: "保修期 (月)",
+    configSpecs: "配置/技术参数",
+
+    // Alert - missing
+    alert_select_device: "请选择资产",
+
+    // Account Modal - missing
+    acc_role_manager: "Manager (管理)",
+    permissionDetails: "权限详情 (仅适用于User/Manager)",
+    perm_add: "添加",
+    perm_edit: "编辑",
+    perm_delete: "删除",
+    perm_confirm: "锁定 (确认)",
+
+    // Role Modal
+    roleModalTitle: "重新分配权限",
+    selectedAccount: "已选账户:",
+    newRole: "新权限",
+    saveNewRole: "保存新权限",
+
+    // Column Filter Popup
+    columnFilterSelectAll: "(全选)",
+    columnFilterOk: "确定",
+    columnFilterCancel: "取消",
+    columnFilterSearch: "搜索",
+
+    // Confirm dialogs
+    confirm_lock_purchase: "您确定要锁定该采购信息吗？",
+    confirm_unlock_purchase: "您确定要解锁该采购信息吗？",
+    confirm_delete_rows: "您确定要删除已选的 {n} 行吗？",
+    confirm_lock_rows: "您确定要锁定已选的 {n} 行吗？",
+    confirm_unlock_rows: "您确定要解锁已选的 {n} 行吗？",
+    alert_action_success: "操作成功",
+
+    // More alerts
+    alert_no_data_in_file: "文件中没有数据",
+    alert_import_device_success: "导入设备成功 ✔️",
+    alert_login_before_refresh: "请先登录再刷新数据 ❗",
+    alert_refresh_success: "已重新加载数据并更新图表 ✔️",
+    alert_invalid_unit_price: "单价无效。请输入非零整数。",
+    alert_empty_source: "有信息为空，请输入采购来源信息。",
+    alert_source_uppercase: "输入信息必须为大写字母",
+    alert_missing_id: "无法删除该记录，因为缺少ID数据！",
+    alert_device_match: "信息正确，请选择合适的资产代码",
+    alert_device_no_match: "信息不正确，请重新输入",
+    alert_excel_no_data: "Excel文件中没有数据。",
+    alert_excel_missing_cols: "缺少列: ",
+    alert_excel_read_error: "无法读取Excel文件。",
+    alert_username_too_short: "用户名太短！",
+    alert_create_account_success: "创建账户成功 ✔️",
+    alert_delete_account_success: "已删除账户。",
+    alert_role_change_success: "已成功重新分配权限 ✔️",
+    admin_system_role: "系统管理员",
+    unlock: "解锁",
   },
 };

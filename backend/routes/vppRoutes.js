@@ -4,24 +4,144 @@ const sql = require('mssql');
 module.exports = function (poolPromise, authenticate) {
   const router = express.Router();
 
+  // =============================================
+  // DANH MỤC 3 CẤP APIs
+  // =============================================
+
+  // Lấy danh sách Loại vật tư (Cấp 1)
+  router.get('/danhmuc/cap1', authenticate, async (req, res) => {
+    try {
+      const pool = await poolPromise;
+      const result = await pool.request().query(`SELECT * FROM dbo.LOAI_VATTU ORDER BY MaCap1`);
+      res.json(result.recordset);
+    } catch (err) {
+      console.error(err);
+      res.status(500).send("Lỗi server khi lấy danh mục cấp 1");
+    }
+  });
+
+  // Lấy danh sách Sản phẩm (Cấp 2)
+  router.get('/danhmuc/cap2', authenticate, async (req, res) => {
+    try {
+      const pool = await poolPromise;
+      const result = await pool.request().query(`
+        SELECT s.Id, s.MaCap2, s.TenCap2, s.LoaiVatTuId, l.MaCap1, l.TenCap1
+        FROM dbo.SANPHAM s
+        JOIN dbo.LOAI_VATTU l ON s.LoaiVatTuId = l.Id
+        ORDER BY s.MaCap2
+      `);
+      res.json(result.recordset);
+    } catch (err) {
+      console.error(err);
+      res.status(500).send("Lỗi server khi lấy danh mục cấp 2");
+    }
+  });
+
+  // Lấy danh sách vật phẩm chi tiết theo Sản phẩm cấp 2
+  router.get('/danhmuc/cap2/:maCap2/vatpham', authenticate, async (req, res) => {
+    try {
+      const pool = await poolPromise;
+      const result = await pool.request()
+        .input('MaCap2', sql.NVarChar, req.params.maCap2)
+        .query(`
+          SELECT v.Id, v.MaCap3, v.TenVPP, v.DonViTinh, v.SoLuongTon, v.SanPhamId
+          FROM dbo.VANPHONGPHAM v
+          JOIN dbo.SANPHAM s ON v.SanPhamId = s.Id
+          WHERE s.MaCap2 = @MaCap2
+          ORDER BY v.MaCap3
+        `);
+      res.json(result.recordset);
+    } catch (err) {
+      console.error(err);
+      res.status(500).send("Lỗi server khi lấy vật phẩm chi tiết");
+    }
+  });
+
+  // Thêm vật phẩm chi tiết mới (tự sinh mã Cấp 3)
+  router.post('/danhmuc/vatpham', authenticate, async (req, res) => {
+    const { MaCap2, TenVPP, DonViTinh, GhiChu } = req.body;
+    if (!MaCap2 || !TenVPP) return res.status(400).send("Thiếu Mã Sản phẩm hoặc Tên vật phẩm");
+
+    try {
+      const pool = await poolPromise;
+      
+      // 1. Tìm SanPhamId từ MaCap2
+      const spResult = await pool.request()
+        .input('MaCap2', sql.NVarChar, MaCap2)
+        .query(`SELECT Id FROM dbo.SANPHAM WHERE MaCap2 = @MaCap2`);
+      
+      if (spResult.recordset.length === 0) {
+        return res.status(404).send(`Không tìm thấy Sản phẩm với mã ${MaCap2}`);
+      }
+      const sanPhamId = spResult.recordset[0].Id;
+
+      // 2. Tự sinh mã Cấp 3: Lấy MAX hiện tại
+      const maxResult = await pool.request()
+        .input('MaCap2Pattern', sql.NVarChar, MaCap2 + '%')
+        .query(`SELECT MAX(MaCap3) AS MaxMa FROM dbo.VANPHONGPHAM WHERE MaCap3 LIKE @MaCap2Pattern`);
+      
+      let nextNumber = 1;
+      const maxMa = maxResult.recordset[0].MaxMa;
+      if (maxMa) {
+        // MaCap2 ví dụ: F0901 (5 ký tự), MaCap3 ví dụ: F0901007 (8 ký tự)
+        // Lấy 3 số cuối
+        const suffixStr = maxMa.substring(MaCap2.length);
+        const suffixNum = parseInt(suffixStr, 10);
+        if (!isNaN(suffixNum)) {
+          nextNumber = suffixNum + 1;
+        }
+      }
+      
+      const newMaCap3 = MaCap2 + String(nextNumber).padStart(3, '0');
+
+      // 3. Insert vào VANPHONGPHAM
+      const insertResult = await pool.request()
+        .input('MaCap3', sql.NVarChar, newMaCap3)
+        .input('TenVPP', sql.NVarChar, TenVPP)
+        .input('DonViTinh', sql.NVarChar, DonViTinh || '')
+        .input('GhiChu', sql.NVarChar, GhiChu || '')
+        .input('SanPhamId', sql.Int, sanPhamId)
+        .query(`
+          INSERT INTO dbo.VANPHONGPHAM (MaCap3, TenVPP, DonViTinh, SoLuongTon, GhiChu, SanPhamId)
+          OUTPUT INSERTED.Id, INSERTED.MaCap3
+          VALUES (@MaCap3, @TenVPP, @DonViTinh, 0, @GhiChu, @SanPhamId)
+        `);
+      
+      res.json({ 
+        id: insertResult.recordset[0].Id, 
+        MaCap3: insertResult.recordset[0].MaCap3,
+        message: "Thêm vật phẩm thành công" 
+      });
+    } catch (err) {
+      console.error(err);
+      res.status(500).send("Lỗi server khi thêm vật phẩm chi tiết");
+    }
+  });
+
+  // =============================================
+  // VPP CRUD APIs (cập nhật MaVPP → MaCap3)
+  // =============================================
+
   // Lấy danh sách Văn phòng phẩm
   router.get('/items', authenticate, async (req, res) => {
     try {
       const pool = await poolPromise;
       const result = await pool.request().query(`
         SELECT 
-          v.Id, v.MaVPP, v.TenVPP, v.DonViTinh, v.SoLuongTon, v.GhiChu, v.HinhAnh,
+          v.Id, v.MaCap3, v.TenVPP, v.DonViTinh, v.SoLuongTon, v.GhiChu, v.HinhAnh, v.SanPhamId, v.ThuongHieu, v.NhaCungCap,
           ISNULL(n.DonGia, 0) AS DonGia,
           ISNULL(n.VAT, 0) AS VAT,
-          CAST(CASE WHEN n.DonGia IS NOT NULL THEN 1 ELSE 0 END AS BIT) AS HasImport
+          CAST(CASE WHEN n.DonGia IS NOT NULL THEN 1 ELSE 0 END AS BIT) AS HasImport,
+          s.MaCap2, s.TenCap2
         FROM dbo.VANPHONGPHAM v
+        LEFT JOIN dbo.SANPHAM s ON v.SanPhamId = s.Id
         OUTER APPLY (
           SELECT TOP 1 DonGia, VAT
           FROM dbo.NHAP_VPP
           WHERE VppId = v.Id
           ORDER BY NgayNhap DESC
         ) n
-        ORDER BY v.TenVPP ASC
+        ORDER BY v.MaCap3 ASC, v.TenVPP ASC
       `);
       res.json(result.recordset);
     } catch (err) {
@@ -30,24 +150,56 @@ module.exports = function (poolPromise, authenticate) {
     }
   });
 
-  // Thêm mới Văn phòng phẩm
+  // Thêm mới Văn phòng phẩm (dùng MaCap3 + SanPhamId)
   router.post('/items', authenticate, async (req, res) => {
-    const { MaVPP, TenVPP, DonViTinh, GhiChu } = req.body;
+    const { MaCap2, TenVPP, DonViTinh, GhiChu } = req.body;
     if (!TenVPP) return res.status(400).send("Thiếu Tên Văn phòng phẩm");
     
     try {
       const pool = await poolPromise;
+      
+      let sanPhamId = null;
+      let maCap3 = null;
+
+      // Nếu có MaCap2 (chọn Sản phẩm), tự sinh mã Cấp 3
+      if (MaCap2) {
+        const spResult = await pool.request()
+          .input('MaCap2', sql.NVarChar, MaCap2)
+          .query(`SELECT Id FROM dbo.SANPHAM WHERE MaCap2 = @MaCap2`);
+        
+        if (spResult.recordset.length > 0) {
+          sanPhamId = spResult.recordset[0].Id;
+          
+          // Tự sinh mã Cấp 3
+          const maxResult = await pool.request()
+            .input('MaCap2Pattern', sql.NVarChar, MaCap2 + '%')
+            .query(`SELECT MAX(MaCap3) AS MaxMa FROM dbo.VANPHONGPHAM WHERE MaCap3 LIKE @MaCap2Pattern`);
+          
+          let nextNumber = 1;
+          const maxMa = maxResult.recordset[0].MaxMa;
+          if (maxMa) {
+            const suffixStr = maxMa.substring(MaCap2.length);
+            const suffixNum = parseInt(suffixStr, 10);
+            if (!isNaN(suffixNum)) nextNumber = suffixNum + 1;
+          }
+          maCap3 = MaCap2 + String(nextNumber).padStart(3, '0');
+        }
+      }
+
       const result = await pool.request()
-        .input('MaVPP', sql.NVarChar, MaVPP || '')
+        .input('MaCap3', sql.NVarChar, maCap3 || '')
         .input('TenVPP', sql.NVarChar, TenVPP)
         .input('DonViTinh', sql.NVarChar, DonViTinh || '')
         .input('GhiChu', sql.NVarChar, GhiChu || '')
+        .input('ThuongHieu', sql.NVarChar, req.body.ThuongHieu || '')
+        .input('NhaCungCap', sql.NVarChar, req.body.NhaCungCap || '')
+        .input('SanPhamId', sql.Int, sanPhamId)
         .query(`
-          INSERT INTO dbo.VANPHONGPHAM (MaVPP, TenVPP, DonViTinh, SoLuongTon, GhiChu)
-          OUTPUT INSERTED.Id
-          VALUES (@MaVPP, @TenVPP, @DonViTinh, 0, @GhiChu)
+          INSERT INTO dbo.VANPHONGPHAM (MaCap3, TenVPP, DonViTinh, SoLuongTon, GhiChu, SanPhamId, ThuongHieu, NhaCungCap)
+          OUTPUT INSERTED.Id, INSERTED.MaCap3
+          VALUES (@MaCap3, @TenVPP, @DonViTinh, 0, @GhiChu, @SanPhamId, @ThuongHieu, @NhaCungCap)
         `);
-      res.json({ id: result.recordset[0].Id, message: "Thêm VPP thành công" });
+      res.json({ id: result.recordset[0].Id, MaCap3: result.recordset[0].MaCap3, message: "Thêm VPP thành công" });
     } catch (err) {
       console.error(err);
       res.status(500).send("Lỗi server khi thêm VPP");
@@ -84,9 +236,13 @@ module.exports = function (poolPromise, authenticate) {
           .input('TenVPP', sql.NVarChar, TenVPP)
           .input('DonViTinh', sql.NVarChar, DonViTinh || '')
           .input('HinhAnh', sql.VarChar(sql.MAX), HinhAnh || '')
+          .input('ThuongHieu', sql.NVarChar, req.body.ThuongHieu || '')
+          .input('NhaCungCap', sql.NVarChar, req.body.NhaCungCap || '')
+          .input('GhiChu', sql.NVarChar, req.body.GhiChu || '')
           .query(`
             UPDATE dbo.VANPHONGPHAM 
-            SET TenVPP = @TenVPP, DonViTinh = @DonViTinh, HinhAnh = @HinhAnh 
+            SET TenVPP = @TenVPP, DonViTinh = @DonViTinh, HinhAnh = @HinhAnh,
+                ThuongHieu = @ThuongHieu, NhaCungCap = @NhaCungCap, GhiChu = @GhiChu
             WHERE Id = @Id
           `);
 
@@ -219,7 +375,7 @@ module.exports = function (poolPromise, authenticate) {
     }
   });
 
-  // Lấy Lịch sử nhập (có thể không dùng nữa, thay bằng /history chung)
+  // Lấy Lịch sử nhập
   router.get('/imports', authenticate, async (req, res) => {
     try {
       const pool = await poolPromise;
@@ -310,7 +466,7 @@ module.exports = function (poolPromise, authenticate) {
       const pool = await poolPromise;
       const result = await pool.request().query(`
         SELECT 
-          v.MaVPP,
+          v.MaCap3,
           'NHAP' AS Loai, 
           v.TenVPP, 
           n.SoLuong, 
@@ -320,14 +476,15 @@ module.exports = function (poolPromise, authenticate) {
           n.NguoiNhap AS NguoiThucHien, 
           '' AS NguoiNhan, 
           n.GhiChu,
-          n.NgayNhap AS ThoiGian
+          n.NgayNhap AS ThoiGianRaw,
+          CONVERT(varchar, n.NgayNhap, 120) AS ThoiGian
         FROM dbo.NHAP_VPP n
         JOIN dbo.VANPHONGPHAM v ON n.VppId = v.Id
         
         UNION ALL
         
         SELECT 
-          v.MaVPP,
+          v.MaCap3,
           'XUAT' AS Loai, 
           v.TenVPP, 
           x.SoLuong, 
@@ -337,11 +494,12 @@ module.exports = function (poolPromise, authenticate) {
           '' AS NguoiThucHien, 
           x.NguoiNhan, 
           x.GhiChu,
-          x.NgayXuat AS ThoiGian
+          x.NgayXuat AS ThoiGianRaw,
+          CONVERT(varchar, x.NgayXuat, 120) AS ThoiGian
         FROM dbo.XUAT_VPP x
         JOIN dbo.VANPHONGPHAM v ON x.VppId = v.Id
         
-        ORDER BY ThoiGian DESC
+        ORDER BY ThoiGianRaw ASC
       `);
       res.json(result.recordset);
     } catch (err) {

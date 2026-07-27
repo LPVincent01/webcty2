@@ -11,7 +11,7 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
   <!-- Styles -->
-  <link rel="stylesheet" href="./style.css" />
+  <link rel="stylesheet" href="/taisan/style.css?v=7" />
   <link rel="stylesheet" href="./vpp.css" />
 </head>
 
@@ -20,12 +20,12 @@
   <div class="login-container" id="loginPage">
     <!-- App Switcher Top Right -->
     <div style="position: absolute; top: 20px; right: 20px; z-index: 1000; display: flex; gap: 10px; background: rgba(255,255,255,0.2); padding: 5px; border-radius: 8px; backdrop-filter: blur(10px);">
-      <a href="index.html" style="padding: 8px 15px; border-radius: 6px; text-decoration: none; font-weight: bold; background: transparent; color: #333; border: 1px solid rgba(0,0,0,0.1);">Tài sản cố định</a>
-      <a href="vpp.html" style="padding: 8px 15px; border-radius: 6px; text-decoration: none; font-weight: bold; background: #3498db; color: white; border: 1px solid #3498db;">Văn phòng phẩm</a>
+      <a href="/taisan/" style="padding: 8px 15px; border-radius: 6px; text-decoration: none; font-weight: bold; background: transparent; color: #333; border: 1px solid rgba(0,0,0,0.1);">Tài sản cố định</a>
+      <a href="/vpp/" style="padding: 8px 15px; border-radius: 6px; text-decoration: none; font-weight: bold; background: #3498db; color: white; border: 1px solid #3498db;">Văn phòng phẩm</a>
     </div>
 
     <div class="login-logo">
-      <img src="styleimage/LOGO.JPG" alt="Springtex logo" />
+      <img src="/shared/styleimage/LOGO.JPG" alt="Springtex logo" />
     </div>
     <div class="login-form hidden" id="loginForm">
       <h1>Đăng nhập</h1>
@@ -107,13 +107,10 @@
                 <tr>
                   <th style="width: 50px;">STT</th>
                   <th style="width: 80px;">HÌNH ẢNH</th>
-                  <th style="width: 100px;">MÃ VPP</th>
+                  <th style="width: 100px;">MÃ VẬT TƯ</th>
                   <th style="width: 200px;">TÊN VẬT TƯ</th>
-                  <th style="width: 70px;">ĐVT</th>
-                  <th style="width: 80px;">TỒN KHO</th>
-                  <th style="width: 100px;">ĐƠN GIÁ</th>
-                  <th style="width: 120px;">ĐƠN GIÁ (VAT)</th>
-                  <th style="width: 120px;">THÀNH TIỀN</th>
+                  <th style="width: 150px;">THƯƠNG HIỆU / HÃNG</th>
+                  <th style="width: 150px;">NHÀ CUNG CẤP</th>
                   <th>GHI CHÚ</th>
                   <th style="width: 80px;">THAO TÁC</th>
                 </tr>
@@ -208,15 +205,13 @@
               <thead>
                 <tr>
                   <th>Mã VPP</th>
-                  <th>Loại</th>
+                  <th>Trạng thái</th>
                   <th>Tên Vật Tư</th>
                   <th>Số Lượng</th>
                   <th>Đơn Giá</th>
                   <th>Đơn Giá (VAT)</th>
                   <th>Thành Tiền</th>
-                  <th>Người Thực Hiện</th>
-                  <th>Người Nhận</th>
-                  <th>Ghi chú</th>
+                  <th>Người Nhập</th>
                   <th>Thời gian</th>
                 </tr>
               </thead>
@@ -242,8 +237,11 @@
         <!-- Cột 1 -->
         <div>
           <div class="form-group" style="margin-bottom: 15px;">
-            <label style="font-weight: 600; color: #444; margin-bottom: 5px; display: block;">Mã VPP (Tuỳ chọn)</label>
-            <input type="text" id="newVppCode" class="form-control" style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px;" placeholder="VD: B001">
+            <label style="font-weight: 600; color: #444; margin-bottom: 5px; display: block;">Nhóm sản phẩm</label>
+            <select id="newVppCode" class="form-control" style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px;">
+              <option value="">-- Chọn nhóm (mã tự sinh) --</option>
+            </select>
+            <small style="color: #888; font-size: 0.8rem;">Mã Cấp 3 sẽ được tự động sinh khi chọn nhóm</small>
           </div>
           <div class="form-group" style="margin-bottom: 15px;">
             <label style="font-weight: 600; color: #444; margin-bottom: 5px; display: block;">Tên Vật Tư <span style="color:#e74c3c">*</span></label>
@@ -257,11 +255,11 @@
         <!-- Cột 2 -->
         <div>
           <div class="form-group" style="margin-bottom: 15px;">
-            <label style="font-weight: 600; color: #444; margin-bottom: 5px; display: block;">Thương Hiệu / Hãng (Tùy chọn)</label>
+            <label style="font-weight: 600; color: #444; margin-bottom: 5px; display: block;">Thương Hiệu / Hãng</label>
             <input type="text" id="newVppBrand" class="form-control" style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px;" placeholder="VD: Thiên Long, Plus">
           </div>
           <div class="form-group" style="margin-bottom: 15px;">
-            <label style="font-weight: 600; color: #444; margin-bottom: 5px; display: block;">Nhà Cung Cấp (Tùy chọn)</label>
+            <label style="font-weight: 600; color: #444; margin-bottom: 5px; display: block;">Nhà Cung Cấp</label>
             <input type="text" id="newVppSupplier" class="form-control" style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px;" placeholder="VD: Cty ABC">
           </div>
           <div class="form-group" style="margin-bottom: 15px;">
@@ -321,6 +319,20 @@
           <div class="form-group" style="margin-bottom: 15px;">
             <label style="font-weight: 600; color: #444; margin-bottom: 5px; display: block;">Đơn Giá Sau VAT (VNĐ)</label>
             <input type="number" id="editVppPriceVat" class="form-control" style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; background: #e9ecef;" readonly>
+          </div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+            <div class="form-group" style="margin-bottom: 15px;">
+              <label style="font-weight: 600; color: #444; margin-bottom: 5px; display: block;">Thương Hiệu / Hãng</label>
+              <input type="text" id="editVppBrand" class="form-control" style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px;" placeholder="VD: Thiên Long">
+            </div>
+            <div class="form-group" style="margin-bottom: 15px;">
+              <label style="font-weight: 600; color: #444; margin-bottom: 5px; display: block;">Nhà Cung Cấp</label>
+              <input type="text" id="editVppSupplier" class="form-control" style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px;" placeholder="VD: Cty ABC">
+            </div>
+          </div>
+          <div class="form-group" style="margin-bottom: 15px;">
+            <label style="font-weight: 600; color: #444; margin-bottom: 5px; display: block;">Ghi Chú Khác</label>
+            <input type="text" id="editVppNote" class="form-control" style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px;" placeholder="Ghi chú thêm...">
           </div>
         </div>
       </div>

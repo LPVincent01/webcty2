@@ -1,6 +1,7 @@
 const API_BASE = "/api";
 let currentToken = localStorage.getItem("eam_token");
 let currentUser = localStorage.getItem("eam_user");
+let currentDisplayName = localStorage.getItem("eam_displayName");
 let vppItems = []; // Danh sách VPP lưu cache
 
 // DOM Elements
@@ -50,6 +51,7 @@ function setupEvents() {
     localStorage.removeItem("eam_token");
     localStorage.removeItem("eam_user");
     localStorage.removeItem("eam_role");
+    localStorage.removeItem("eam_displayName");
     window.location.href = "index.html";
   });
 
@@ -82,6 +84,7 @@ function setupEvents() {
   const addModal = document.getElementById("addVppModal");
   document.getElementById("addVppBtn").addEventListener("click", () => {
     addModal.style.display = "block";
+    loadCap2Dropdown();
   });
   document.getElementById("closeAddVppModal").addEventListener("click", () => {
     addModal.style.display = "none";
@@ -97,6 +100,18 @@ function setupEvents() {
   
   // History events
   document.getElementById("refreshHistoryBtn").addEventListener("click", loadHistoryData);
+
+  // Toggle password visibility
+  const togglePassword = document.getElementById("togglePassword");
+  const passwordInput = document.getElementById("password");
+  if (togglePassword && passwordInput) {
+    togglePassword.addEventListener("click", function () {
+      const type = passwordInput.getAttribute("type") === "password" ? "text" : "password";
+      passwordInput.setAttribute("type", type);
+      this.classList.toggle("fa-eye");
+      this.classList.toggle("fa-eye-slash");
+    });
+  }
 }
 
 // --- Auth ---
@@ -116,8 +131,10 @@ async function handleLogin() {
     localStorage.setItem("eam_token", data.token);
     localStorage.setItem("eam_user", data.username);
     localStorage.setItem("eam_role", data.role);
+    localStorage.setItem("eam_displayName", data.displayName);
     currentToken = data.token;
     currentUser = data.username;
+    currentDisplayName = data.displayName;
     showApp();
     loadVppItems();
   } catch (err) {
@@ -128,13 +145,41 @@ async function handleLogin() {
 function showApp() {
   document.getElementById("loginPage").style.display = "none";
   document.getElementById("appContainer").style.display = "block";
-  document.getElementById("currentUserText").textContent = currentUser || "User";
+  
+  const displayName = typeof currentDisplayName !== 'undefined' ? currentDisplayName : localStorage.getItem("eam_displayName");
+  const displayText = (displayName && displayName !== currentUser) ? `${displayName} ${currentUser}` : currentUser || "User";
+  document.getElementById("currentUserText").textContent = displayText;
+  
+  const avatarName = displayName ? encodeURIComponent(displayName) : currentUser || "User";
+  const userAvatar = document.getElementById("userAvatar");
+  if(userAvatar) {
+    userAvatar.src = `https://ui-avatars.com/api/?name=${avatarName}&background=3498db&color=fff`;
+  }
 }
 
 function showLogin() {
   document.getElementById("appContainer").style.display = "none";
   document.getElementById("loginPage").style.display = "flex";
   document.getElementById("loginForm").classList.remove("hidden");
+}
+
+// --- Load Dropdown Cấp 2 cho Modal Thêm VPP ---
+async function loadCap2Dropdown() {
+  try {
+    const res = await fetch(`${API_BASE}/vpp/danhmuc/cap2`, {
+      headers: { "Authorization": `Bearer ${currentToken}` }
+    });
+    if (!res.ok) return;
+    const cap2List = await res.json();
+    const select = document.getElementById("newVppCode");
+    if (!select) return;
+    select.innerHTML = `<option value="">-- Chọn nhóm (mã tự sinh) --</option>`;
+    cap2List.forEach(item => {
+      select.innerHTML += `<option value="${item.MaCap2}">${item.MaCap2} - ${item.TenCap2}</option>`;
+    });
+  } catch (err) {
+    console.error("Lỗi tải danh mục cấp 2:", err);
+  }
 }
 
 // --- Fetch Data ---
@@ -162,22 +207,52 @@ function refreshAllDropdowns() {
   let optionsMaHtml = `<option value="">Chọn Mã</option>`;
   let optionsTenHtml = `<option value="">Chọn Tên</option>`;
   vppItems.forEach(item => {
-    if(item.MaVPP) optionsMaHtml += `<option value="${item.MaVPP}">${item.MaVPP}</option>`;
+    if(item.MaCap3) optionsMaHtml += `<option value="${item.MaCap3}">${item.MaCap3}</option>`;
     optionsTenHtml += `<option value="${item.TenVPP}">${item.TenVPP}</option>`;
   });
-  document.querySelectorAll('#importTableBody .item-ma').forEach(sel => { const val = sel.value; sel.innerHTML = optionsMaHtml; sel.value = val; });
-  document.querySelectorAll('#importTableBody .item-name').forEach(sel => { const val = sel.value; sel.innerHTML = optionsTenHtml; sel.value = val; });
+  
+  // Import table
+  document.querySelectorAll('#importTableBody tr').forEach(tr => {
+    const maSel = tr.querySelector('.item-ma');
+    const nameSel = tr.querySelector('.item-name');
+    const valMa = maSel.value;
+    const valName = nameSel.value;
+    maSel.innerHTML = optionsMaHtml; maSel.value = valMa;
+    nameSel.innerHTML = optionsTenHtml; nameSel.value = valName;
+    
+    // Update DVT if an item is selected
+    const selectedItem = vppItems.find(x => x.MaCap3 === valMa || x.TenVPP === valName);
+    if (selectedItem) {
+      tr.querySelector('.item-dvt').value = selectedItem.DonViTinh || '';
+    }
+  });
 
   let optionsMaHtmlExport = `<option value="">Chọn Mã</option>`;
   let optionsTenHtmlExport = `<option value="">Chọn Tên</option>`;
   vppItems.forEach(item => {
     if(item.SoLuongTon > 0) {
-      if(item.MaVPP) optionsMaHtmlExport += `<option value="${item.MaVPP}">${item.MaVPP}</option>`;
+      if(item.MaCap3) optionsMaHtmlExport += `<option value="${item.MaCap3}">${item.MaCap3}</option>`;
       optionsTenHtmlExport += `<option value="${item.TenVPP}">${item.TenVPP}</option>`;
     }
   });
-  document.querySelectorAll('#exportTableBody .item-ma').forEach(sel => { const val = sel.value; sel.innerHTML = optionsMaHtmlExport; sel.value = val; });
-  document.querySelectorAll('#exportTableBody .item-name').forEach(sel => { const val = sel.value; sel.innerHTML = optionsTenHtmlExport; sel.value = val; });
+  
+  // Export table
+  document.querySelectorAll('#exportTableBody tr').forEach(tr => {
+    const maSel = tr.querySelector('.item-ma');
+    const nameSel = tr.querySelector('.item-name');
+    const valMa = maSel.value;
+    const valName = nameSel.value;
+    maSel.innerHTML = optionsMaHtmlExport; maSel.value = valMa;
+    nameSel.innerHTML = optionsTenHtmlExport; nameSel.value = valName;
+    
+    // Update DVT and Ton if an item is selected
+    const selectedItem = vppItems.find(x => x.MaCap3 === valMa || x.TenVPP === valName);
+    if (selectedItem) {
+      tr.querySelector('.item-dvt').value = selectedItem.DonViTinh || '';
+      tr.querySelector('.item-ton').value = selectedItem.SoLuongTon || 0;
+      tr.querySelector('.item-qty').max = selectedItem.SoLuongTon || 0;
+    }
+  });
 }
 
 let currentVppPage = 1;
@@ -210,13 +285,10 @@ function renderVppTable() {
       <td style="text-align:center">
         ${imgHtml}
       </td>
-      <td>${item.MaVPP || ''}</td>
+      <td>${item.MaCap3 || ''}</td>
       <td><strong>${item.TenVPP}</strong></td>
-      <td>${item.DonViTinh || ''}</td>
-      <td><strong>${item.SoLuongTon || 0}</strong></td>
-      <td>${donGia.toLocaleString('vi-VN')}</td>
-      <td>${donGiaVAT.toLocaleString('vi-VN')}</td>
-      <td style="font-weight:bold; color:#0056b3;">${thanhTien.toLocaleString('vi-VN')}</td>
+      <td>${item.ThuongHieu || ''}</td>
+      <td>${item.NhaCungCap || ''}</td>
       <td>${item.GhiChu || ''}</td>
       <td style="display: flex; gap: 5px;">
         <button class="btn btn-warning btn-sm" onclick="openEditVppModal(${item.Id})" style="margin-right: 5px;" title="Chỉnh sửa"><i class="fas fa-pen"></i></button>
@@ -234,6 +306,11 @@ function renderVppTable() {
   }
 }
 
+window.changeVppPage = function(page) {
+  currentVppPage = page;
+  renderVppTable();
+};
+
 // Edit VPP Logic
 function openEditVppModal(id) {
   const item = vppItems.find(i => i.Id == id);
@@ -242,6 +319,9 @@ function openEditVppModal(id) {
   document.getElementById('editVppId').value = item.Id;
   document.getElementById('editVppName').value = item.TenVPP || "";
   document.getElementById('editVppUnit').value = item.DonViTinh || "";
+  document.getElementById('editVppBrand').value = item.ThuongHieu || "";
+  document.getElementById('editVppSupplier').value = item.NhaCungCap || "";
+  document.getElementById('editVppNote').value = item.GhiChu || "";
   
   const priceInput = document.getElementById('editVppPrice');
   const vatInput = document.getElementById('editVppVat');
@@ -320,6 +400,9 @@ document.getElementById('saveEditVppBtn').addEventListener('click', async () => 
   const payload = {
     TenVPP,
     DonViTinh: document.getElementById('editVppUnit').value.trim(),
+    ThuongHieu: document.getElementById('editVppBrand').value.trim(),
+    NhaCungCap: document.getElementById('editVppSupplier').value.trim(),
+    GhiChu: document.getElementById('editVppNote').value.trim(),
     DonGia: parseFloat(document.getElementById('editVppPrice').value) || 0,
     VAT: parseFloat(document.getElementById('editVppVat').value) || 0,
     HinhAnh: document.getElementById('editVppImageBase64').value || ""
@@ -361,7 +444,14 @@ async function saveNewVpp() {
         "Content-Type": "application/json",
         "Authorization": `Bearer ${currentToken}` 
       },
-      body: JSON.stringify({ MaVPP: code, TenVPP: name, DonViTinh: unit, GhiChu: note })
+      body: JSON.stringify({ 
+        MaCap2: code, 
+        TenVPP: name, 
+        DonViTinh: unit, 
+        GhiChu: note,
+        ThuongHieu: document.getElementById("newVppBrand") ? document.getElementById("newVppBrand").value.trim() : "",
+        NhaCungCap: document.getElementById("newVppSupplier") ? document.getElementById("newVppSupplier").value.trim() : ""
+      })
     });
     
     if (res.status === 401 || res.status === 403) {
@@ -417,7 +507,7 @@ function addImportRow() {
   let optionsMaHtml = `<option value="">Chọn Mã</option>`;
   let optionsTenHtml = `<option value="">Chọn Tên</option>`;
   vppItems.forEach(item => {
-    if(item.MaVPP) optionsMaHtml += `<option value="${item.MaVPP}">${item.MaVPP}</option>`;
+    if(item.MaCap3) optionsMaHtml += `<option value="${item.MaCap3}">${item.MaCap3}</option>`;
     optionsTenHtml += `<option value="${item.TenVPP}">${item.TenVPP}</option>`;
   });
   
@@ -465,7 +555,7 @@ function addImportRow() {
   // Khi chọn Mã VPP
   maInput.addEventListener('change', (e) => {
     const val = e.target.value.trim();
-    const item = vppItems.find(x => x.MaVPP === val);
+    const item = vppItems.find(x => x.MaCap3 === val);
     if(item) {
       tr.querySelector('.item-id').value = item.Id;
       tr.querySelector('.item-name').value = item.TenVPP;
@@ -479,7 +569,7 @@ function addImportRow() {
     const item = vppItems.find(x => x.TenVPP === val);
     if(item) {
       tr.querySelector('.item-id').value = item.Id;
-      tr.querySelector('.item-ma').value = item.MaVPP || '';
+      tr.querySelector('.item-ma').value = item.MaCap3 || '';
       tr.querySelector('.item-dvt').value = item.DonViTinh;
     }
   });
@@ -573,7 +663,7 @@ function addExportRow() {
   let optionsTenHtml = `<option value="">Chọn Tên</option>`;
   vppItems.forEach(item => {
     if(item.SoLuongTon > 0) {
-      if(item.MaVPP) optionsMaHtml += `<option value="${item.MaVPP}">${item.MaVPP}</option>`;
+      if(item.MaCap3) optionsMaHtml += `<option value="${item.MaCap3}">${item.MaCap3}</option>`;
       optionsTenHtml += `<option value="${item.TenVPP}">${item.TenVPP}</option>`;
     }
   });
@@ -605,7 +695,7 @@ function addExportRow() {
   
   maInput.addEventListener('change', (e) => {
     const val = e.target.value.trim();
-    const item = vppItems.find(x => x.MaVPP === val);
+    const item = vppItems.find(x => x.MaCap3 === val);
     if(item) {
       tr.querySelector('.item-id').value = item.Id;
       tr.querySelector('.item-name').value = item.TenVPP;
@@ -620,7 +710,7 @@ function addExportRow() {
     const item = vppItems.find(x => x.TenVPP === val);
     if(item) {
       tr.querySelector('.item-id').value = item.Id;
-      tr.querySelector('.item-ma').value = item.MaVPP || '';
+      tr.querySelector('.item-ma').value = item.MaCap3 || '';
       tr.querySelector('.item-dvt').value = item.DonViTinh;
       tr.querySelector('.item-ton').value = item.SoLuongTon;
       tr.querySelector('.item-qty').max = item.SoLuongTon;
@@ -711,30 +801,26 @@ async function loadHistoryData() {
     if(!tbody) return;
     
     tbody.innerHTML = data.map(item => {
-      const dateStr = new Date(item.ThoiGian).toLocaleString('vi-VN');
       const badge = item.Loai === 'NHAP' 
         ? '<span style="background: #2ecc71; color: #fff; padding: 2px 6px; border-radius: 4px; font-size:0.8rem">NHẬP</span>'
         : '<span style="background: #e67e22; color: #fff; padding: 2px 6px; border-radius: 4px; font-size:0.8rem">XUẤT</span>';
         
       const donGiaStr = item.DonGia != null ? item.DonGia.toLocaleString('vi-VN') : '-';
-      const vatStr = item.VAT != null ? item.VAT + '%' : '-';
       const donGiaVATStr = item.DonGia != null ? (item.DonGia * (1 + item.VAT/100)).toLocaleString('vi-VN') : '-';
       const thanhTienStr = item.ThanhTien != null ? item.ThanhTien.toLocaleString('vi-VN') : '-';
+      const nguoiNhap = item.NguoiThucHien || item.NguoiNhan || '';
 
       return `
         <tr>
-          <td>${item.MaVPP || ''}</td>
+          <td>${item.MaCap3 || ''}</td>
           <td>${badge}</td>
           <td>${item.TenVPP}</td>
           <td><strong>${item.SoLuong}</strong></td>
           <td>${donGiaStr}</td>
-          <td>${vatStr}</td>
           <td>${donGiaVATStr}</td>
           <td style="color:#0056b3; font-weight:bold">${thanhTienStr}</td>
-          <td>${item.NguoiThucHien || ''}</td>
-          <td>${item.NguoiNhan || ''}</td>
-          <td>${item.GhiChu || ''}</td>
-          <td>${dateStr}</td>
+          <td>${nguoiNhap}</td>
+          <td>${item.ThoiGian}</td>
         </tr>
       `;
     }).join("");

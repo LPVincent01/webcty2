@@ -15,10 +15,9 @@ const HOST = "0.0.0.0"; // Cho phép truy cập từ tất cả IP trong LAN
 const config = {
   user: process.env.DB_USER || "sa",
   password: process.env.DB_PASSWORD || "Abc@123456!",
-  //server: process.env.DB_SERVER || "127.0.0.1",
-  // Thay 127.0.0.1 thành IP của Server để dù chạy ở Laptop vẫn trỏ về Server
-  server: process.env.DB_SERVER || "192.168.11.205",
+  server: process.env.DB_SERVER || "localhost",
   database: process.env.DB_NAME || "QuanLyThietBi",
+  port: 1433,
   options: {
     encrypt: false,
     trustServerCertificate: true,
@@ -68,8 +67,12 @@ app.use((req, _res, next) => {
 });
 
 /* ======= PHỤC VỤ FRONTEND (STATIC) ======= */
-app.use(express.static(__dirname));
-app.get("/", (_req, res) => res.sendFile(path.join(__dirname, "index.html")));
+app.use("/taisan", express.static(path.join(__dirname, "../frontend/taisan")));
+app.use("/vpp", express.static(path.join(__dirname, "../frontend/vpp")));
+app.use("/shared", express.static(path.join(__dirname, "../frontend/shared")));
+app.use("/public", express.static(path.join(__dirname, "../public")));
+// Chuyển hướng gốc về taisan
+app.get("/", (_req, res) => res.redirect("/taisan/index.html"));
 app.get("/health", (_req, res) => res.json({ ok: true }));
 
 /* ====== AUTH (ĐĂNG NHẬP + PHÂN QUYỀN) ====== */
@@ -137,6 +140,10 @@ app.post("/api/login", async (req, res) => {
       username: user.Username,
       role: user.Role,
       displayName: user.DisplayName, // Lưu thêm tên hiển thị
+      canAdd: user.CanAdd,
+      canEdit: user.CanEdit,
+      canDelete: user.CanDelete,
+      canConfirm: user.CanConfirm,
       expiresAt: Date.now() + TOKEN_TTL,
     });
     return res.json({
@@ -144,6 +151,10 @@ app.post("/api/login", async (req, res) => {
       role: user.Role,
       username: user.Username,
       displayName: user.DisplayName,
+      canAdd: user.CanAdd,
+      canEdit: user.CanEdit,
+      canDelete: user.CanDelete,
+      canConfirm: user.CanConfirm,
     });
   } catch (err) {
     handleSqlError(res, err);
@@ -177,7 +188,7 @@ app.post("/api/vpp/login", async (req, res) => {
     TOKENS.set(token, {
       username: user.Username,
       role: user.Role,
-      displayName: user.Username,
+      displayName: user.DisplayName || user.Username,
       expiresAt: Date.now() + TOKEN_TTL,
     });
     
@@ -185,7 +196,7 @@ app.post("/api/vpp/login", async (req, res) => {
       token,
       role: user.Role,
       username: user.Username,
-      displayName: user.Username,
+      displayName: user.DisplayName || user.Username,
     });
   } catch (err) {
     console.error("VPP Login Error:", err);
@@ -200,10 +211,7 @@ app.get("/api/accounts", authenticate, authorizeAdmin, async (req, res) => {
   try {
     const pool = await poolPromise;
     const result = await pool
-      .request()
-      .query(
-        "SELECT Username, Role, DisplayName, CreatedAt, MatKhauGoc FROM dbo.TAIKHOAN",
-      );
+      .request().query("SELECT Username, Role, DisplayName, CreatedAt, MatKhauGoc, CanAdd, CanEdit, CanDelete, CanConfirm FROM dbo.TAIKHOAN");
     res.json(result.recordset);
   } catch (err) {
     handleSqlError(res, err);
@@ -212,7 +220,7 @@ app.get("/api/accounts", authenticate, authorizeAdmin, async (req, res) => {
 
 // 2. Tạo tài khoản mới (Có mã hóa mật khẩu + Lưu mật khẩu gốc)
 app.post("/api/accounts", authenticate, authorizeAdmin, async (req, res) => {
-  const { username, password, role, displayName } = req.body;
+  const { username, password, role, displayName, canAdd, canEdit, canDelete, canConfirm } = req.body;
 
   if (!username || !password) {
     return res.status(400).send("Thiếu tên đăng nhập hoặc mật khẩu");
@@ -247,9 +255,13 @@ app.post("/api/accounts", authenticate, authorizeAdmin, async (req, res) => {
       .input("PasswordHash", sql.VarChar, passwordToSave) // Mật khẩu đã mã hóa dùng để đăng nhập
       .input("MatKhauGoc", sql.NVarChar, password) // Mật khẩu gốc dùng để xem
       .input("Role", sql.VarChar, role || "user")
-      .input("DisplayName", sql.NVarChar, displayName || username).query(`
-        INSERT INTO dbo.TAIKHOAN (Username, PasswordHash, Role, DisplayName, MatKhauGoc)
-        VALUES (@Username, @PasswordHash, @Role, @DisplayName, @MatKhauGoc)
+      .input("CanAdd", sql.Bit, canAdd === undefined ? 1 : canAdd)
+      .input("CanEdit", sql.Bit, canEdit === undefined ? 1 : canEdit)
+      .input("CanDelete", sql.Bit, canDelete === undefined ? 0 : canDelete)
+      .input("CanConfirm", sql.Bit, canConfirm === undefined ? 0 : canConfirm)
+      .query(`
+        INSERT INTO dbo.TAIKHOAN (Username, PasswordHash, Role, DisplayName, MatKhauGoc, CanAdd, CanEdit, CanDelete, CanConfirm)
+        VALUES (@Username, @PasswordHash, @Role, @DisplayName, @MatKhauGoc, @CanAdd, @CanEdit, @CanDelete, @CanConfirm)
       `);
 
     res.status(201).send("Tạo tài khoản thành công");
@@ -281,17 +293,12 @@ app.delete(
 
 // Cập nhật quyền tài khoản (Admin Only)
 app.put(
-  "/api/accounts/:username/role",
+  "/api/accounts/:username",
   authenticate,
   authorizeAdmin,
   async (req, res) => {
     const { username } = req.params;
-    const { role } = req.body;
-
-    // Kiểm tra quyền hợp lệ
-    if (!role || (role !== "admin" && role !== "user")) {
-      return res.status(400).send("Quyền không hợp lệ");
-    }
+    const { role, canAdd, canEdit, canDelete, canConfirm } = req.body;
 
     // Không cho phép đổi quyền của tài khoản admin gốc
     if (username === "admin") {
@@ -303,9 +310,13 @@ app.put(
       await pool
         .request()
         .input("Username", sql.VarChar, username)
-        .input("Role", sql.VarChar, role)
+        .input("Role", sql.VarChar, role || 'user')
+        .input("CanAdd", sql.Bit, canAdd ? 1 : 0)
+        .input("CanEdit", sql.Bit, canEdit ? 1 : 0)
+        .input("CanDelete", sql.Bit, canDelete ? 1 : 0)
+        .input("CanConfirm", sql.Bit, canConfirm ? 1 : 0)
         .query(
-          "UPDATE dbo.TAIKHOAN SET Role = @Role WHERE Username = @Username",
+          "UPDATE dbo.TAIKHOAN SET Role = @Role, CanAdd = @CanAdd, CanEdit = @CanEdit, CanDelete = @CanDelete, CanConfirm = @CanConfirm WHERE Username = @Username",
         );
 
       res.send("Cập nhật quyền thành công");
@@ -607,7 +618,7 @@ const vppPoolPromise = new sql.ConnectionPool(configVPP)
       );
 
     // --- Tích hợp các route VPP ---
-    app.use('/api/vpp', require('./vppRoutes')(vppPoolPromise, authenticate));
+    app.use('/api/vpp', require('./routes/vppRoutes')(vppPoolPromise, authenticate));
 
     app.listen(PORT, HOST, () =>
       console.log(`🚀 Server chạy tại http://${HOST}:${PORT}`),
@@ -804,20 +815,23 @@ app.get("/api/purchases", authenticate, async (_req, res) => {
     const pool = await poolPromise;
     const result = await pool.request().query(`
       SELECT
-        PurchaseId,
+        ThongTinMuaHangId,
         MaTaiSan,
         TenTaiSan,
         LoaiTaiSan,
         NgayNhap,
+        DonGia,
+        VATRate,
         ThanhTien,
         NguonMua,
         CreatedAt,
         UpdatedAt,
         LastUserName,
         LastUserId,
-        LastAssignedDate
-      FROM dbo.Purchase
-      ORDER BY MaTaiSan, NgayNhap DESC, PurchaseId DESC
+        LastAssignedDate,
+        TrangThai
+      FROM dbo.ThongTinMuaHang
+      ORDER BY MaTaiSan, NgayNhap DESC, ThongTinMuaHangId DESC
     `);
     res.json(result.recordset);
   } catch (err) {
@@ -828,7 +842,11 @@ app.get("/api/purchases", authenticate, async (_req, res) => {
 app.post("/api/purchases", authenticate, async (req, res) => {
   const {
     MaTaiSan,
+    TenTaiSan,
+    LoaiTaiSan,
     NgayNhap,
+    DonGia,
+    VATRate,
     ThanhTien,
     NguonMua,
     LastUserName,
@@ -843,7 +861,7 @@ app.post("/api/purchases", authenticate, async (req, res) => {
   try {
     const pool = await poolPromise;
 
-    // Lấy thông tin thiết bị để tự điền TenTaiSan, LoaiTaiSan
+    // Lấy thông tin thiết bị để tự điền TenTaiSan, LoaiTaiSan nếu có
     const devResult = await pool
       .request()
       .input("MaTaiSan", sql.VarChar(50), MaTaiSan)
@@ -851,18 +869,22 @@ app.post("/api/purchases", authenticate, async (req, res) => {
         "SELECT TenTaiSan, LoaiTaiSan FROM dbo.THIETBI WHERE MaTaiSan=@MaTaiSan",
       );
 
-    if (!devResult.recordset.length) {
-      return res.status(400).send("Mã tài sản không tồn tại trong THIETBI");
-    }
+    let dbTenTaiSan = TenTaiSan || null;
+    let dbLoaiTaiSan = LoaiTaiSan || null;
 
-    const { TenTaiSan, LoaiTaiSan } = devResult.recordset[0];
+    if (devResult.recordset.length) {
+      dbTenTaiSan = devResult.recordset[0].TenTaiSan || dbTenTaiSan;
+      dbLoaiTaiSan = devResult.recordset[0].LoaiTaiSan;
+    }
 
     const insertReq = pool
       .request()
       .input("MaTaiSan", sql.VarChar(50), MaTaiSan)
-      .input("TenTaiSan", sql.NVarChar(255), TenTaiSan || null)
-      .input("LoaiTaiSan", sql.NVarChar(100), LoaiTaiSan || null)
+      .input("TenTaiSan", sql.NVarChar(255), dbTenTaiSan)
+      .input("LoaiTaiSan", sql.NVarChar(100), dbLoaiTaiSan)
       .input("NgayNhap", sql.Date, NgayNhap)
+      .input("DonGia", sql.Decimal(18, 2), DonGia ?? null)
+      .input("VATRate", sql.Decimal(5, 2), VATRate ?? null)
       .input("ThanhTien", sql.Decimal(18, 2), ThanhTien ?? null)
       .input("NguonMua", sql.NVarChar(50), NguonMua || null)
       .input("LastUserName", sql.NVarChar(100), LastUserName || null)
@@ -870,15 +892,15 @@ app.post("/api/purchases", authenticate, async (req, res) => {
       .input("LastAssignedDate", sql.DateTime, LastAssignedDate || null);
 
     const result = await insertReq.query(`
-      INSERT INTO dbo.Purchase
-        (MaTaiSan, TenTaiSan, LoaiTaiSan, NgayNhap, ThanhTien, NguonMua,
+      INSERT INTO dbo.ThongTinMuaHang
+        (MaTaiSan, TenTaiSan, LoaiTaiSan, NgayNhap, DonGia, VATRate, ThanhTien, NguonMua,
          LastUserName, LastUserId, LastAssignedDate, CreatedAt, UpdatedAt)
       VALUES
-        (@MaTaiSan, @TenTaiSan, @LoaiTaiSan, @NgayNhap, @ThanhTien, @NguonMua,
+        (@MaTaiSan, @TenTaiSan, @LoaiTaiSan, @NgayNhap, @DonGia, @VATRate, @ThanhTien, @NguonMua,
          @LastUserName, @LastUserId, @LastAssignedDate, GETDATE(), GETDATE());
       SELECT TOP 1 *
-      FROM dbo.Purchase
-      WHERE PurchaseId = SCOPE_IDENTITY();
+      FROM dbo.ThongTinMuaHang
+      WHERE ThongTinMuaHangId = SCOPE_IDENTITY();
     `);
 
     res.status(201).json(result.recordset[0]);
@@ -891,16 +913,19 @@ app.post("/api/purchases", authenticate, async (req, res) => {
 app.put(
   "/api/purchases/:id",
   authenticate,
-  authorizeAdmin, // Chỉ admin được sửa
   async (req, res) => {
     const purchaseId = parseInt(req.params.id, 10);
     if (!purchaseId || purchaseId < 1) {
-      return res.status(400).send("PurchaseId không hợp lệ");
+      return res.status(400).send("ThongTinMuaHangId không hợp lệ");
     }
 
     const {
       MaTaiSan,
+      TenTaiSan,
+      LoaiTaiSan,
       NgayNhap,
+      DonGia,
+      VATRate,
       ThanhTien,
       NguonMua,
       LastUserName,
@@ -913,7 +938,17 @@ app.put(
     }
 
     try {
+      if (req.user.role !== 'admin' && !req.user.canEdit && req.user.username !== '叶鑫') {
+        return res.status(403).send("Không có quyền sửa thông tin mua hàng");
+      }
+
       const pool = await poolPromise;
+
+      const existingCheck = await pool.request().input("id", sql.Int, purchaseId).query("SELECT TrangThai FROM dbo.ThongTinMuaHang WHERE ThongTinMuaHangId = @id");
+      if (existingCheck.recordset.length === 0) return res.status(404).send("Không tìm thấy");
+      if (existingCheck.recordset[0].TrangThai === 1 && req.user.role !== 'admin' && req.user.username !== '叶鑫') {
+        return res.status(403).send("Dữ liệu đã bị khóa, không thể sửa");
+      }
 
       // Lấy thông tin thiết bị
       const devResult = await pool
@@ -923,19 +958,23 @@ app.put(
           "SELECT TenTaiSan, LoaiTaiSan FROM dbo.THIETBI WHERE MaTaiSan=@MaTaiSan",
         );
 
-      if (!devResult.recordset.length) {
-        return res.status(400).send("Mã tài sản không tồn tại trong THIETBI");
-      }
+      let dbTenTaiSan = TenTaiSan || null;
+      let dbLoaiTaiSan = LoaiTaiSan || null;
 
-      const { TenTaiSan, LoaiTaiSan } = devResult.recordset[0];
+      if (devResult.recordset.length) {
+        dbTenTaiSan = devResult.recordset[0].TenTaiSan || dbTenTaiSan;
+        dbLoaiTaiSan = devResult.recordset[0].LoaiTaiSan;
+      }
 
       const updateReq = pool
         .request()
-        .input("PurchaseId", sql.Int, purchaseId)
+        .input("ThongTinMuaHangId", sql.Int, purchaseId)
         .input("MaTaiSan", sql.VarChar(50), MaTaiSan)
-        .input("TenTaiSan", sql.NVarChar(255), TenTaiSan || null)
-        .input("LoaiTaiSan", sql.NVarChar(100), LoaiTaiSan || null)
+        .input("TenTaiSan", sql.NVarChar(255), dbTenTaiSan)
+        .input("LoaiTaiSan", sql.NVarChar(100), dbLoaiTaiSan)
         .input("NgayNhap", sql.Date, NgayNhap)
+        .input("DonGia", sql.Decimal(18, 2), DonGia ?? null)
+        .input("VATRate", sql.Decimal(5, 2), VATRate ?? null)
         .input("ThanhTien", sql.Decimal(18, 2), ThanhTien ?? null)
         .input("NguonMua", sql.NVarChar(50), NguonMua || null)
         .input("LastUserName", sql.NVarChar(100), LastUserName || null)
@@ -943,27 +982,29 @@ app.put(
         .input("LastAssignedDate", sql.DateTime, LastAssignedDate || null);
 
       const result = await updateReq.query(`
-      UPDATE dbo.Purchase
+      UPDATE dbo.ThongTinMuaHang
       SET
         MaTaiSan      = @MaTaiSan,
         TenTaiSan     = @TenTaiSan,
         LoaiTaiSan    = @LoaiTaiSan,
         NgayNhap       = @NgayNhap,
+        DonGia         = @DonGia,
+        VATRate        = @VATRate,
         ThanhTien      = @ThanhTien,
         NguonMua       = @NguonMua,
         LastUserName   = @LastUserName,
         LastUserId     = @LastUserId,
         LastAssignedDate = @LastAssignedDate,
         UpdatedAt      = GETDATE()
-      WHERE PurchaseId   = @PurchaseId;
+      WHERE ThongTinMuaHangId   = @ThongTinMuaHangId;
 
       SELECT *
-      FROM dbo.Purchase
-      WHERE PurchaseId = @PurchaseId;
+      FROM dbo.ThongTinMuaHang
+      WHERE ThongTinMuaHangId = @ThongTinMuaHangId;
     `);
 
       if (!result.recordset.length) {
-        return res.status(404).send("Không tìm thấy bản ghi Purchase");
+        return res.status(404).send("Không tìm thấy bản ghi ThongTinMuaHang");
       }
 
       res.json(result.recordset[0]);
@@ -977,24 +1018,30 @@ app.put(
 app.delete(
   "/api/purchases/:id",
   authenticate,
-  authorizeAdmin, // Chỉ admin được xóa
   async (req, res) => {
     const purchaseId = parseInt(req.params.id, 10);
     if (!purchaseId || purchaseId < 1) {
-      return res.status(400).send("PurchaseId không hợp lệ");
+      return res.status(400).send("ThongTinMuaHangId không hợp lệ");
     }
 
     try {
+      // Ai cũng có thể xóa dòng chưa khóa
+
       const pool = await poolPromise;
+      const existingCheck = await pool.request().input("id", sql.Int, purchaseId).query("SELECT TrangThai FROM dbo.ThongTinMuaHang WHERE ThongTinMuaHangId = @id");
+      if (existingCheck.recordset.length === 0) return res.status(404).send("Không tìm thấy");
+      if (existingCheck.recordset[0].TrangThai === 1 && req.user.role !== 'admin' && req.user.username !== '叶鑫') {
+        return res.status(403).send("Dữ liệu đã bị khóa, không thể xóa");
+      }
       const result = await pool
         .request()
-        .input("PurchaseId", sql.Int, purchaseId).query(`
-          DELETE FROM dbo.Purchase
-          WHERE PurchaseId = @PurchaseId;
+        .input("ThongTinMuaHangId", sql.Int, purchaseId).query(`
+          DELETE FROM dbo.ThongTinMuaHang
+          WHERE ThongTinMuaHangId = @ThongTinMuaHangId;
         `);
 
       if (!result.rowsAffected[0]) {
-        return res.status(404).send("Không tìm thấy bản ghi Purchase");
+        return res.status(404).send("Không tìm thấy bản ghi ThongTinMuaHang");
       }
 
       res.status(204).send(); // No Content
@@ -1002,6 +1049,48 @@ app.delete(
       handleSqlError(res, err);
     }
   },
+);
+
+// Khóa/Mở khóa thông tin mua hàng
+app.put(
+  "/api/purchases/:id/confirm",
+  authenticate,
+  async (req, res) => {
+    const purchaseId = parseInt(req.params.id, 10);
+    const { trangThai } = req.body; // 0 hoặc 1
+
+    if (!purchaseId || purchaseId < 1 || (trangThai !== 0 && trangThai !== 1)) {
+      return res.status(400).send("Dữ liệu không hợp lệ");
+    }
+
+    try {
+      // Ai cũng có thể khóa thông tin (trangThai = 1)
+
+      const pool = await poolPromise;
+      // Nếu là mở khóa (trangThai = 0), chỉ admin và 叶鑫 được làm
+      if (trangThai === 0 && req.user.role !== 'admin' && req.user.username !== '叶鑫') {
+         return res.status(403).send("Chỉ admin hoặc quản lý cấp cao mới được mở khóa");
+      }
+
+      const result = await pool
+        .request()
+        .input("ThongTinMuaHangId", sql.Int, purchaseId)
+        .input("TrangThai", sql.Int, trangThai)
+        .query(`
+          UPDATE dbo.ThongTinMuaHang
+          SET TrangThai = @TrangThai, UpdatedAt = GETDATE()
+          WHERE ThongTinMuaHangId = @ThongTinMuaHangId;
+        `);
+
+      if (!result.rowsAffected[0]) {
+        return res.status(404).send("Không tìm thấy bản ghi ThongTinMuaHang");
+      }
+
+      res.status(200).send("Thành công");
+    } catch (err) {
+      handleSqlError(res, err);
+    }
+  }
 );
 
 /* ========== PUBLIC API CHO UPLOAD HÌNH ẢNH ========== */
@@ -1410,7 +1499,7 @@ app.delete(
         // 3. Xóa dữ liệu MUA HÀNG LIÊN QUAN (Dọn dẹp khóa ngoại)
         await new sql.Request(tx)
           .input("MaTaiSan", sql.VarChar, req.params.id)
-          .query("DELETE FROM dbo.Purchase WHERE MaTaiSan=@MaTaiSan");
+          .query("DELETE FROM dbo.ThongTinMuaHang WHERE MaTaiSan=@MaTaiSan");
 
         // 4. Cuối cùng mới xóa thiết bị trong bảng gốc THIETBI
         await new sql.Request(tx)
