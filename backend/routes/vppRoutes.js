@@ -132,7 +132,7 @@ module.exports = function (poolPromise, authenticate) {
       const pool = await poolPromise;
       const result = await pool.request().query(`
         SELECT 
-          v.Id, v.MaCap3, v.TenVPP, v.DonViTinh, v.GhiChu, v.HinhAnh, v.SanPhamId, v.ThuongHieu, v.NhaCungCap,
+          v.Id, v.MaCap3, v.TenVPP, v.DonViTinh, v.GhiChu, v.HinhAnh, v.SanPhamId, v.ThuongHieu, v.NhaCungCap, v.NguonMua,
           ISNULL(n.DonGia, 0) AS DonGia,
           ISNULL(n.VAT, 0) AS VAT,
           CAST(CASE WHEN n.DonGia IS NOT NULL THEN 1 ELSE 0 END AS BIT) AS HasImport,
@@ -217,11 +217,12 @@ module.exports = function (poolPromise, authenticate) {
         .input('GhiChu', sql.NVarChar, GhiChu || '')
         .input('ThuongHieu', sql.NVarChar, req.body.ThuongHieu || '')
         .input('NhaCungCap', sql.NVarChar, req.body.NhaCungCap || '')
+        .input('NguonMua', sql.NVarChar, req.body.NguonMua || 'VN')
         .input('SanPhamId', sql.Int, sanPhamId)
         .query(`
-          INSERT INTO dbo.VANPHONGPHAM (MaCap3, TenVPP, DonViTinh, GhiChu, SanPhamId, ThuongHieu, NhaCungCap)
+          INSERT INTO dbo.VANPHONGPHAM (MaCap3, TenVPP, DonViTinh, GhiChu, SanPhamId, ThuongHieu, NhaCungCap, NguonMua)
           OUTPUT INSERTED.Id, INSERTED.MaCap3
-          VALUES (@MaCap3, @TenVPP, @DonViTinh, @GhiChu, @SanPhamId, @ThuongHieu, @NhaCungCap)
+          VALUES (@MaCap3, @TenVPP, @DonViTinh, @GhiChu, @SanPhamId, @ThuongHieu, @NhaCungCap, @NguonMua)
         `);
       res.json({ id: result.recordset[0].Id, MaCap3: result.recordset[0].MaCap3, message: "Thêm VPP thành công" });
     } catch (err) {
@@ -340,8 +341,32 @@ module.exports = function (poolPromise, authenticate) {
       await transaction.begin();
 
       try {
-        const request = new sql.Request(transaction);
         
+        const vppIds = items.map(i => i.VppId).filter(id => id != null && id !== '');
+        let nguonMuaPrefix = 'FVN';
+        let nguonMua = 'VN';
+        if (vppIds.length > 0) {
+          const idList = vppIds.join(',');
+          const sourceCheck = await pool.request().query(`SELECT DISTINCT NguonMua FROM dbo.V_VATTU WHERE Id IN (${idList})`);
+          if (sourceCheck.recordset.length > 1) {
+             return res.status(400).send("Không thể tạo chung phiếu cho vật tư VN và CN. Vui lòng tách 2 phiếu riêng.");
+          }
+          if (sourceCheck.recordset.length === 1) {
+             nguonMua = sourceCheck.recordset[0].NguonMua || 'VN';
+             nguonMuaPrefix = (nguonMua === 'CN') ? 'FCN' : 'FVN';
+          }
+        }
+        
+        const today = new Date();
+        const dateStr = today.getFullYear() + String(today.getMonth() + 1).padStart(2, '0') + String(today.getDate()).padStart(2, '0');
+        const todayYMD = today.toISOString().slice(0, 10);
+        const countResult = await pool.request().input('Today', sql.Date, todayYMD).query(`SELECT COUNT(DISTINCT MaDon) AS Cnt FROM dbo.NHAP_VPP`);
+        const nextNum = String(countResult.recordset[0].Cnt + 1).padStart(3, '0');
+        const maDon = nguonMuaPrefix + nextNum + 'A-' + dateStr;
+        
+        const request = new sql.Request(transaction);
+
+
         for (let item of items) {
           // 1. Nếu chưa có VppId, tức là thêm mới VPP luôn từ form nhập
           let vppId = item.VppId;
@@ -349,10 +374,11 @@ module.exports = function (poolPromise, authenticate) {
              const vppInsert = await request
               .input('TenVPP', sql.NVarChar, item.TenVPP)
               .input('DonViTinh', sql.NVarChar, item.DonViTinh || '')
+              .input('NguonMua', sql.NVarChar, nguonMua)
               .query(`
-                INSERT INTO dbo.VANPHONGPHAM (TenVPP, DonViTinh)
+                INSERT INTO dbo.VANPHONGPHAM (TenVPP, DonViTinh, NguonMua)
                 OUTPUT INSERTED.Id
-                VALUES (@TenVPP, @DonViTinh)
+                VALUES (@TenVPP, @DonViTinh, @NguonMua)
               `);
              vppId = vppInsert.recordset[0].Id;
              // Reset parameter for next loop
@@ -368,9 +394,10 @@ module.exports = function (poolPromise, authenticate) {
             .input('ThanhTien', sql.Float, item.ThanhTien)
             .input('NguoiNhap', sql.NVarChar, user)
             .input('GhiChuNhap', sql.NVarChar, item.GhiChu || '')
+            .input('MaDon', sql.NVarChar, maDon)
             .query(`
-              INSERT INTO dbo.NHAP_VPP (VppId, SoLuong, DonGia, VAT, ThanhTien, NguoiNhap, GhiChu)
-              VALUES (@VppId2, @SoLuong, @DonGia, @VAT, @ThanhTien, @NguoiNhap, @GhiChuNhap)
+              INSERT INTO dbo.NHAP_VPP (VppId, SoLuong, DonGia, VAT, ThanhTien, NguoiNhap, GhiChu, MaDon, PheDuyet)
+              VALUES (@VppId2, @SoLuong, @DonGia, @VAT, @ThanhTien, @NguoiNhap, @GhiChuNhap, @MaDon, 0)
             `);
             
           request.parameters = {};
@@ -435,7 +462,7 @@ module.exports = function (poolPromise, authenticate) {
         SELECT n.Id, v.TenVPP, v.DonViTinh, n.SoLuong, n.DonGia, n.VAT, n.ThanhTien, n.NgayNhap, n.NguoiNhap, n.GhiChu
         FROM dbo.NHAP_VPP n
         JOIN dbo.V_VATTU v ON n.VppId = v.Id AND n.Loai = v.Loai
-        ORDER BY n.NgayNhap DESC
+        ORDER BY n.NgayNhap ASC
       `);
       res.json(result.recordset);
     } catch (err) {
@@ -459,6 +486,26 @@ module.exports = function (poolPromise, authenticate) {
       await transaction.begin();
 
       try {
+        const vppIds = items.map(i => i.VppId).filter(id => id != null && id !== '');
+        let nguonMuaPrefix = 'FVN';
+        if (vppIds.length > 0) {
+          const idList = vppIds.join(',');
+          const sourceCheck = await pool.request().query(`SELECT DISTINCT NguonMua FROM dbo.V_VATTU WHERE Id IN (${idList})`);
+          if (sourceCheck.recordset.length > 1) {
+             return res.status(400).send("Không thể xuất chung phiếu cho vật tư VN và CN. Vui lòng tách 2 phiếu riêng.");
+          }
+          if (sourceCheck.recordset.length === 1) {
+             const nguonMua = sourceCheck.recordset[0].NguonMua || 'VN';
+             nguonMuaPrefix = (nguonMua === 'CN') ? 'FCN' : 'FVN';
+          }
+        }
+        
+        const today = new Date();
+        const dateStr = today.getFullYear() + String(today.getMonth() + 1).padStart(2, '0') + String(today.getDate()).padStart(2, '0');
+        const countResult = await pool.request().query(`SELECT COUNT(DISTINCT MaDon) AS Cnt FROM dbo.XUAT_VPP`);
+        const nextNum = String(countResult.recordset[0].Cnt + 1).padStart(3, '0');
+        const maDon = nguonMuaPrefix + nextNum + 'B-' + dateStr;
+
         for (let item of items) {
           if (!item.VppId) throw new Error("Thiếu mã vật tư");
           
@@ -491,9 +538,10 @@ module.exports = function (poolPromise, authenticate) {
             .input('GhiChu', sql.NVarChar, item.GhiChu || '')
             .input('MSNV', sql.NVarChar, item.MSNV || '')
             .input('BoPhan', sql.NVarChar, item.BoPhan || '')
+            .input('MaDon', sql.NVarChar, maDon)
             .query(`
-              INSERT INTO dbo.XUAT_VPP (VppId, Loai, SoLuong, NguoiNhan, GhiChu, MSNV, BoPhan)
-              VALUES (@VppId, @Loai, @SoLuong, @NguoiNhan, @GhiChu, @MSNV, @BoPhan)
+              INSERT INTO dbo.XUAT_VPP (VppId, Loai, SoLuong, NguoiNhan, GhiChu, MSNV, BoPhan, MaDon, PheDuyet)
+              VALUES (@VppId, @Loai, @SoLuong, @NguoiNhan, @GhiChu, @MSNV, @BoPhan, @MaDon, 0)
             `);
 
           // Trừ tồn kho
@@ -571,6 +619,278 @@ module.exports = function (poolPromise, authenticate) {
     } catch (err) {
       console.error(err);
       res.status(500).send("Lỗi server khi lấy lịch sử VPP");
+    }
+  });
+
+  
+
+  // =============================================
+  // QUẢN LÝ ĐƠN NHẬP KHO
+  // =============================================
+  router.get('/import-list', authenticate, async (req, res) => {
+    try {
+      const pool = await poolPromise;
+      const result = await pool.request().query(`
+        SELECT n.Id, n.MaDon, v.MaCap3, v.TenVPP, n.SoLuong, n.DonGia, n.VAT, n.ThanhTien, n.NguoiNhap, n.PheDuyet, n.NgayNhap
+        FROM dbo.NHAP_VPP n
+        JOIN dbo.V_VATTU v ON n.VppId = v.Id AND n.Loai = v.Loai
+        ORDER BY n.NgayNhap ASC
+      `);
+      res.json(result.recordset);
+    } catch (err) {
+      console.error(err);
+      res.status(500).send("Lỗi lấy danh sách đơn nhập");
+    }
+  });
+
+  router.put('/import/approve', authenticate, async (req, res) => {
+    const { ids, status } = req.body;
+    if (!ids || !ids.length) return res.status(400).send("Không có ID");
+    try {
+      const pool = await poolPromise;
+      const idList = ids.join(',');
+      await pool.request().query(`UPDATE dbo.NHAP_VPP SET PheDuyet = ${status} WHERE Id IN (${idList})`);
+      res.json({ message: "Cập nhật thành công" });
+    } catch (err) {
+      console.error(err);
+      res.status(500).send("Lỗi cập nhật");
+    }
+  });
+
+  router.delete('/import/:id', authenticate, async (req, res) => {
+    const id = req.params.id;
+    try {
+      const pool = await poolPromise;
+      const transaction = new sql.Transaction(pool);
+      await transaction.begin();
+      try {
+        const reqCheck = new sql.Request(transaction);
+        const nhapData = await reqCheck.input('Id', sql.Int, id).query(`SELECT VppId, Loai, SoLuong, DonGia, VAT, ThanhTien FROM dbo.NHAP_VPP WHERE Id = @Id AND PheDuyet = 0`);
+        if (nhapData.recordset.length === 0) throw new Error("Không tìm thấy hoặc đã được phê duyệt (khóa)");
+        
+        const data = nhapData.recordset[0];
+        
+        // Trừ tồn kho
+        const reqUpdate = new sql.Request(transaction);
+        await reqUpdate
+          .input('VppId', sql.Int, data.VppId)
+          .input('Loai', sql.VarChar, data.Loai)
+          .input('Qty', sql.Float, data.SoLuong)
+          .input('ThanhTien', sql.Float, data.ThanhTien)
+          .query(`
+            UPDATE dbo.TONKHO_VPP 
+            SET SoLuongTon = SoLuongTon - @Qty,
+                DonGiaTon = CASE WHEN (SoLuongTon - @Qty) > 0 THEN ((SoLuongTon * DonGiaTon) - @ThanhTien) / (SoLuongTon - @Qty) ELSE 0 END
+            WHERE VppId = @VppId AND Loai = @Loai
+          `);
+          
+        const reqDel = new sql.Request(transaction);
+        await reqDel.input('Id', sql.Int, id).query(`DELETE FROM dbo.NHAP_VPP WHERE Id = @Id`);
+        
+        await transaction.commit();
+        res.json({ message: "Xóa thành công" });
+      } catch (err) {
+        await transaction.rollback();
+        throw err;
+      }
+    } catch (err) {
+      console.error(err);
+      res.status(500).send(err.message || "Lỗi xóa đơn nhập");
+    }
+  });
+  
+  router.put('/import/:id', authenticate, async (req, res) => {
+    const id = req.params.id;
+    const { SoLuong, DonGia, VAT } = req.body;
+    try {
+      const pool = await poolPromise;
+      const transaction = new sql.Transaction(pool);
+      await transaction.begin();
+      try {
+        const reqCheck = new sql.Request(transaction);
+        const nhapData = await reqCheck.input('Id', sql.Int, id).query(`SELECT VppId, Loai, SoLuong, DonGia, VAT, ThanhTien FROM dbo.NHAP_VPP WHERE Id = @Id AND PheDuyet = 0`);
+        if (nhapData.recordset.length === 0) throw new Error("Không tìm thấy hoặc đã được phê duyệt (khóa)");
+        
+        const oldData = nhapData.recordset[0];
+        const newThanhTien = SoLuong * (DonGia * (1 + (VAT || 0)/100.0));
+        
+        // Trừ cái cũ, cộng cái mới vào tồn kho
+        const reqUpdate = new sql.Request(transaction);
+        await reqUpdate
+          .input('VppId', sql.Int, oldData.VppId)
+          .input('Loai', sql.VarChar, oldData.Loai)
+          .input('OldQty', sql.Float, oldData.SoLuong)
+          .input('OldThanhTien', sql.Float, oldData.ThanhTien)
+          .input('NewQty', sql.Float, SoLuong)
+          .input('NewThanhTien', sql.Float, newThanhTien)
+          .query(`
+            UPDATE dbo.TONKHO_VPP 
+            SET SoLuongTon = SoLuongTon - @OldQty + @NewQty,
+                DonGiaTon = CASE WHEN (SoLuongTon - @OldQty + @NewQty) > 0 
+                            THEN ((SoLuongTon * DonGiaTon) - @OldThanhTien + @NewThanhTien) / (SoLuongTon - @OldQty + @NewQty) 
+                            ELSE 0 END
+            WHERE VppId = @VppId AND Loai = @Loai
+          `);
+          
+        const reqSave = new sql.Request(transaction);
+        await reqSave
+          .input('Id', sql.Int, id)
+          .input('SoLuong', sql.Float, SoLuong)
+          .input('DonGia', sql.Float, DonGia)
+          .input('VAT', sql.Float, VAT || 0)
+          .input('ThanhTien', sql.Float, newThanhTien)
+          .query(`
+            UPDATE dbo.NHAP_VPP 
+            SET SoLuong = @SoLuong, DonGia = @DonGia, VAT = @VAT, ThanhTien = @ThanhTien
+            WHERE Id = @Id
+          `);
+          
+        await transaction.commit();
+        res.json({ message: "Sửa thành công" });
+      } catch (err) {
+        await transaction.rollback();
+        throw err;
+      }
+    } catch (err) {
+      console.error(err);
+      res.status(500).send(err.message || "Lỗi sửa đơn nhập");
+    }
+  });
+
+  // =============================================
+  // QUẢN LÝ ĐƠN XUẤT KHO
+  // =============================================
+  router.get('/export-list', authenticate, async (req, res) => {
+    try {
+      const pool = await poolPromise;
+      const result = await pool.request().query(`
+        SELECT x.Id, x.MaDon, v.MaCap3, v.TenVPP, x.SoLuong, t.DonGiaTon, (x.SoLuong * ISNULL(t.DonGiaTon, 0)) AS ThanhTien, x.NguoiNhan, x.MSNV, x.BoPhan, x.PheDuyet, x.NgayXuat
+        FROM dbo.XUAT_VPP x
+        JOIN dbo.V_VATTU v ON x.VppId = v.Id AND x.Loai = v.Loai
+        LEFT JOIN dbo.TONKHO_VPP t ON x.VppId = t.VppId AND x.Loai = t.Loai
+        ORDER BY x.NgayXuat ASC
+      `);
+      res.json(result.recordset);
+    } catch (err) {
+      console.error(err);
+      res.status(500).send("Lỗi lấy danh sách đơn xuất");
+    }
+  });
+
+  router.put('/export/approve', authenticate, async (req, res) => {
+    const { ids, status } = req.body;
+    if (!ids || !ids.length) return res.status(400).send("Không có ID");
+    try {
+      const pool = await poolPromise;
+      const idList = ids.join(',');
+      await pool.request().query(`UPDATE dbo.XUAT_VPP SET PheDuyet = ${status} WHERE Id IN (${idList})`);
+      res.json({ message: "Cập nhật thành công" });
+    } catch (err) {
+      console.error(err);
+      res.status(500).send("Lỗi cập nhật");
+    }
+  });
+
+  router.delete('/export/:id', authenticate, async (req, res) => {
+    const id = req.params.id;
+    try {
+      const pool = await poolPromise;
+      const transaction = new sql.Transaction(pool);
+      await transaction.begin();
+      try {
+        const reqCheck = new sql.Request(transaction);
+        const xuatData = await reqCheck.input('Id', sql.Int, id).query(`SELECT VppId, Loai, SoLuong FROM dbo.XUAT_VPP WHERE Id = @Id AND PheDuyet = 0`);
+        if (xuatData.recordset.length === 0) throw new Error("Không tìm thấy hoặc đã được phê duyệt (khóa)");
+        
+        const data = xuatData.recordset[0];
+        
+        // Cộng lại tồn kho
+        const reqUpdate = new sql.Request(transaction);
+        await reqUpdate
+          .input('VppId', sql.Int, data.VppId)
+          .input('Loai', sql.VarChar, data.Loai)
+          .input('Qty', sql.Float, data.SoLuong)
+          .query(`
+            UPDATE dbo.TONKHO_VPP 
+            SET SoLuongTon = SoLuongTon + @Qty
+            WHERE VppId = @VppId AND Loai = @Loai
+          `);
+          
+        const reqDel = new sql.Request(transaction);
+        await reqDel.input('Id', sql.Int, id).query(`DELETE FROM dbo.XUAT_VPP WHERE Id = @Id`);
+        
+        await transaction.commit();
+        res.json({ message: "Xóa thành công" });
+      } catch (err) {
+        await transaction.rollback();
+        throw err;
+      }
+    } catch (err) {
+      console.error(err);
+      res.status(500).send(err.message || "Lỗi xóa đơn xuất");
+    }
+  });
+  
+  router.put('/export/:id', authenticate, async (req, res) => {
+    const id = req.params.id;
+    const { SoLuong } = req.body;
+    try {
+      const pool = await poolPromise;
+      const transaction = new sql.Transaction(pool);
+      await transaction.begin();
+      try {
+        const reqCheck = new sql.Request(transaction);
+        const xuatData = await reqCheck.input('Id', sql.Int, id).query(`SELECT VppId, Loai, SoLuong FROM dbo.XUAT_VPP WHERE Id = @Id AND PheDuyet = 0`);
+        if (xuatData.recordset.length === 0) throw new Error("Không tìm thấy hoặc đã được phê duyệt (khóa)");
+        
+        const oldData = xuatData.recordset[0];
+        
+        // Kiểm tra tồn kho có đủ không
+        const reqStock = new sql.Request(transaction);
+        const stockData = await reqStock
+          .input('VppId', sql.Int, oldData.VppId)
+          .input('Loai', sql.VarChar, oldData.Loai)
+          .query(`SELECT SoLuongTon FROM dbo.TONKHO_VPP WHERE VppId = @VppId AND Loai = @Loai`);
+          
+        if (stockData.recordset.length === 0) throw new Error("Không tìm thấy tồn kho");
+        const availableStock = stockData.recordset[0].SoLuongTon + oldData.SoLuong; // Trả lại kho trước khi trừ
+        
+        if (availableStock < SoLuong) {
+           throw new Error(`Không đủ tồn kho. Tối đa: ${availableStock}`);
+        }
+        
+        // Cộng lại cái cũ, trừ cái mới
+        const reqUpdate = new sql.Request(transaction);
+        await reqUpdate
+          .input('VppId', sql.Int, oldData.VppId)
+          .input('Loai', sql.VarChar, oldData.Loai)
+          .input('OldQty', sql.Float, oldData.SoLuong)
+          .input('NewQty', sql.Float, SoLuong)
+          .query(`
+            UPDATE dbo.TONKHO_VPP 
+            SET SoLuongTon = SoLuongTon + @OldQty - @NewQty
+            WHERE VppId = @VppId AND Loai = @Loai
+          `);
+          
+        const reqSave = new sql.Request(transaction);
+        await reqSave
+          .input('Id', sql.Int, id)
+          .input('SoLuong', sql.Float, SoLuong)
+          .query(`
+            UPDATE dbo.XUAT_VPP 
+            SET SoLuong = @SoLuong
+            WHERE Id = @Id
+          `);
+          
+        await transaction.commit();
+        res.json({ message: "Sửa thành công" });
+      } catch (err) {
+        await transaction.rollback();
+        throw err;
+      }
+    } catch (err) {
+      console.error(err);
+      res.status(500).send(err.message || "Lỗi sửa đơn xuất");
     }
   });
 
