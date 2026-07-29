@@ -2,7 +2,11 @@ const API_BASE = "/api";
 let currentToken = localStorage.getItem("eam_token");
 let currentUser = localStorage.getItem("eam_user");
 let currentDisplayName = localStorage.getItem("eam_displayName");
-let vppItems = []; // Danh sách VPP lưu cache
+let vppItems = [];
+let cmItems = []; // Danh sách VPP lưu cache
+let vppInventoryItems = []; // Danh sách tồn kho
+let importRowCount = 0;
+let exportRowCount = 0;
 
 // DOM Elements
 const loginPage = document.getElementById("loginPage");
@@ -34,6 +38,7 @@ document.addEventListener("DOMContentLoaded", () => {
   if (currentToken) {
     showApp();
     loadVppItems();
+    loadInventory();
   } else {
     showLogin();
   }
@@ -56,16 +61,42 @@ function setupEvents() {
   });
 
   // Sidebar navigation
+  
+  const toggleThongTin = document.getElementById("toggleThongTinVatTu");
+  const submenu = document.getElementById("submenuThongTinVatTu");
+  const icon = document.getElementById("iconThongTinVatTu");
+  if (toggleThongTin) {
+    toggleThongTin.addEventListener("click", () => {
+      if (submenu.style.display === "none") {
+        submenu.style.display = "block";
+        icon.className = "fas fa-chevron-up";
+      } else {
+        submenu.style.display = "none";
+        icon.className = "fas fa-chevron-down";
+      }
+    });
+  }
+
   document.querySelectorAll(".sidebar-menu a").forEach(link => {
     link.addEventListener("click", (e) => {
       e.preventDefault();
       document.querySelectorAll(".sidebar-menu a").forEach(a => a.classList.remove("active"));
       link.classList.add("active");
       
-      document.querySelectorAll(".content-section").forEach(sec => sec.style.display = "none");
+      // Remove animation classes from all sections first
+      document.querySelectorAll(".content-section").forEach(sec => {
+        sec.querySelectorAll(".table-container, .card, .chart-container").forEach(el => el.classList.remove("animate-in"));
+        sec.style.display = "none";
+      });
+      
       const targetId = `vpp-${link.dataset.section}Section`;
       const targetSec = document.getElementById(targetId);
-      if(targetSec) targetSec.style.display = "block";
+      if(targetSec) {
+        targetSec.style.display = "block";
+        // Add animation class to elements in the new section
+        const elementsToAnimate = targetSec.querySelectorAll(".table-container, .card, .chart-container");
+        elementsToAnimate.forEach(el => el.classList.add("animate-in"));
+      }
     });
   });
 
@@ -75,7 +106,15 @@ function setupEvents() {
   if(document.getElementById("refreshVppBtn")) {
     document.getElementById("refreshVppBtn").addEventListener("click", async () => {
       await loadVppItems();
+      await loadInventory();
       await loadHistoryData();
+      showAlert("Dữ liệu đã được cập nhật", true);
+    });
+  }
+  
+  if(document.getElementById("btnRestoreImportData")) {
+    document.getElementById("btnRestoreImportData").addEventListener("click", async () => {
+      await loadVppItems();
       showAlert("Dữ liệu đã được cập nhật", true);
     });
   }
@@ -83,6 +122,8 @@ function setupEvents() {
   // Add VPP Modal
   const addModal = document.getElementById("addVppModal");
   document.getElementById("addVppBtn").addEventListener("click", () => {
+    window.currentAddType = 'VPP';
+    if(document.getElementById("addModalTitle")) document.getElementById("addModalTitle").innerText = 'Thêm Văn Phòng Phẩm Mới';
     addModal.style.display = "block";
     loadCap2Dropdown();
   });
@@ -98,8 +139,172 @@ function setupEvents() {
   document.getElementById("addExportRowBtn").addEventListener("click", addExportRow);
   document.getElementById("saveExportBtn").addEventListener("click", saveExportData);
   
-  // History events
-  document.getElementById("refreshHistoryBtn").addEventListener("click", loadHistoryData);
+  // Thêm logic Tra cứu Danh mục VPP
+  
+  // Thêm logic Tra cứu Danh mục Chuyền May
+  if(document.getElementById("btnFilterCmList")) {
+    document.getElementById("btnFilterCmList").addEventListener("click", () => {
+      // Implement CM filter logic here (simplified)
+      const keyword = document.getElementById("filterCmTen").value.toLowerCase();
+      const filtered = cmItems.filter(item => item.TenVPP.toLowerCase().includes(keyword));
+      renderCmTable(filtered);
+    });
+    document.getElementById("btnClearCmFilter").addEventListener("click", () => {
+      document.getElementById("filterCmTen").value = "";
+      renderCmTable(cmItems);
+    });
+  }
+
+  // Nút Thêm Chuyền May
+  if(document.getElementById("addCmBtn")) {
+    document.getElementById("addCmBtn").addEventListener("click", () => {
+      window.currentAddType = 'CM';
+      if(document.getElementById("addModalTitle")) document.getElementById("addModalTitle").innerText = 'Thêm mới Vật tư Chuyền May';
+      document.getElementById("addVppModal").style.display = "block";
+      // Chuyền may uses standard grouping or no grouping, but we should load the dropdown just in case it's used
+      loadCap2Dropdown();
+    });
+  }
+  
+  window.editCm = async function(id) {
+    const item = cmItems.find(x => x.Id === id);
+    const newName = prompt("Sửa tên Chuyền May:", item.TenVPP);
+    if(newName) {
+       await fetch('/api/vpp/cm/items/' + id, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + currentToken },
+          body: JSON.stringify({ TenVPP: newName, ThuongHieu: item.ThuongHieu, NhaCungCap: item.NhaCungCap, DonViTinh: item.DonViTinh })
+       });
+       loadCmItems();
+    }
+  };
+  
+  window.deleteCm = async function(id) {
+    if(confirm("Bạn có chắc muốn xóa?")) {
+       await fetch('/api/vpp/cm/items/' + id, {
+          method: 'DELETE',
+          headers: { 'Authorization': 'Bearer ' + currentToken }
+       });
+       loadCmItems();
+    }
+  };
+
+  if(document.getElementById("btnFilterVppList")) {
+    document.getElementById("btnFilterVppList").addEventListener("click", applyVppFilters);
+    document.getElementById("btnClearVppFilter").addEventListener("click", clearVppFilters);
+  }
+
+  // Thêm logic Tra cứu Lịch sử
+  if(document.getElementById("btnFilterHistoryList")) {
+    document.getElementById("btnFilterHistoryList").addEventListener("click", applyHistoryFilters);
+    document.getElementById("btnClearHistoryFilter").addEventListener("click", clearHistoryFilters);
+  }
+
+  // Modal Import Excel & Dropdown
+  const importModal = document.getElementById("importExcelModal");
+  const excelDropdownContent = document.getElementById("excelDropdownContent");
+  
+  // Toggle dropdown khi click nút Excel
+  // Modal Import Excel & Dropdown cho Chuyền May
+  const cmExcelDropdownContent = document.getElementById("cmExcelDropdownContent");
+  
+  if (document.getElementById("btnCmExcelDropdown")) {
+    document.getElementById("btnCmExcelDropdown").addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (cmExcelDropdownContent.style.display === "block") {
+        cmExcelDropdownContent.style.display = "none";
+      } else {
+        cmExcelDropdownContent.style.display = "block";
+      }
+    });
+  }
+
+  if (cmExcelDropdownContent) {
+    cmExcelDropdownContent.addEventListener("click", (e) => {
+      e.stopPropagation();
+    });
+  }
+
+  window.addEventListener("click", () => {
+    if (cmExcelDropdownContent && cmExcelDropdownContent.style.display === "block") {
+      cmExcelDropdownContent.style.display = "none";
+    }
+  });
+
+  if (document.getElementById("btnCmOpenImportModal")) {
+    document.getElementById("btnCmOpenImportModal").addEventListener("click", () => {
+      cmExcelDropdownContent.style.display = "none";
+      document.getElementById("importExcelFile").value = "";
+      document.getElementById("importExcelFile").click();
+    });
+  }
+  
+  if (document.getElementById("btnCmExportExcel")) {
+    document.getElementById("btnCmExportExcel").addEventListener("click", () => {
+      cmExcelDropdownContent.style.display = "none";
+      if (!cmItems || cmItems.length === 0) {
+        alert("Không có dữ liệu để xuất Excel");
+        return;
+      }
+      exportTableToExcel(cmItems, "Danh_Muc_Chuyen_May");
+    });
+  }
+
+  if (document.getElementById("btnExcelDropdown")) {
+    document.getElementById("btnExcelDropdown").addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (excelDropdownContent.style.display === "block") {
+        excelDropdownContent.style.display = "none";
+      } else {
+        excelDropdownContent.style.display = "block";
+      }
+    });
+  }
+
+  // Ngăn click bên trong dropdown lan ra window (nguyên nhân gốc khiến Import không hoạt động)
+  if (excelDropdownContent) {
+    excelDropdownContent.addEventListener("click", (e) => {
+      e.stopPropagation();
+    });
+  }
+
+  // Đóng dropdown khi click ra ngoài
+  window.addEventListener("click", () => {
+    if (excelDropdownContent && excelDropdownContent.style.display === "block") {
+      excelDropdownContent.style.display = "none";
+    }
+  });
+
+  // Nút Import Excel — mở hộp thoại chọn file (ẩn modal phụ)
+  if (document.getElementById("btnOpenImportModal")) {
+    document.getElementById("btnOpenImportModal").addEventListener("click", () => {
+      excelDropdownContent.style.display = "none";
+      // Reset input file trước khi mở để đảm bảo sự kiện change luôn được kích hoạt
+      document.getElementById("importExcelFile").value = "";
+      document.getElementById("importExcelFile").click();
+    });
+  }
+
+  // Khi người dùng đã chọn file từ hộp thoại của hệ điều hành
+  const importFileInput = document.getElementById("importExcelFile");
+  if (importFileInput) {
+    importFileInput.addEventListener("change", (e) => {
+      if (e.target.files && e.target.files.length > 0) {
+        // Tự động gọi hàm import mà không cần hiện modal
+        handleImportExcel();
+      }
+    });
+  }
+
+  // Nút Excelout — xuất file (CHỈ 1 listener duy nhất)
+  if (document.getElementById("btnExportExcel")) {
+    document.getElementById("btnExportExcel").addEventListener("click", () => {
+      excelDropdownContent.style.display = "none";
+      handleExportExcel();
+    });
+  }
+
+  // Các nút của modal import cũ đã được xóa bỏ
 
   // Toggle password visibility
   const togglePassword = document.getElementById("togglePassword");
@@ -137,6 +342,9 @@ async function handleLogin() {
     currentDisplayName = data.displayName;
     showApp();
     loadVppItems();
+    loadCmItems();
+    loadInventory();
+    loadHistoryData();
   } catch (err) {
     alert(err.message);
   }
@@ -172,17 +380,82 @@ async function loadCap2Dropdown() {
     if (!res.ok) return;
     const cap2List = await res.json();
     const select = document.getElementById("newVppCode");
-    if (!select) return;
-    select.innerHTML = `<option value="">-- Chọn nhóm (mã tự sinh) --</option>`;
+    const filterVppMa = document.getElementById("filterVppMa");
+    const filterHistoryMa = document.getElementById("filterHistoryMa");
+    
+    let optionsHtml = `<option value="">-- Chọn nhóm --</option>`;
     cap2List.forEach(item => {
-      select.innerHTML += `<option value="${item.MaCap2}">${item.MaCap2} - ${item.TenCap2}</option>`;
+      optionsHtml += `<option value="${item.MaCap2}">${item.MaCap2} - ${item.TenCap2}</option>`;
     });
+
+    if (select) {
+      select.innerHTML = `<option value="">-- Chọn nhóm (mã tự sinh) --</option>`;
+      cap2List.forEach(item => {
+        select.innerHTML += `<option value="${item.MaCap2}">${item.MaCap2} - ${item.TenCap2}</option>`;
+      });
+    }
+    
+    if (filterVppMa) {
+      filterVppMa.innerHTML = `<option value="">-- Mã Vật Tư (Tất cả) --</option>`;
+      cap2List.forEach(item => {
+        filterVppMa.innerHTML += `<option value="${item.MaCap2}">${item.MaCap2} - ${item.TenCap2}</option>`;
+      });
+    }
+
+    if (filterHistoryMa) {
+      filterHistoryMa.innerHTML = `<option value="">-- Mã Vật Tư (Tất cả) --</option>`;
+      cap2List.forEach(item => {
+        filterHistoryMa.innerHTML += `<option value="${item.MaCap2}">${item.MaCap2} - ${item.TenCap2}</option>`;
+      });
+    }
   } catch (err) {
     console.error("Lỗi tải danh mục cấp 2:", err);
   }
 }
 
 // --- Fetch Data ---
+
+async function loadCmItems() {
+  try {
+    const res = await fetch(`/api/vpp/cm/items`, { headers: { "Authorization": `Bearer ${currentToken}` } });
+    if (res.ok) {
+      cmItems = await res.json();
+      renderCmTable();
+    }
+  } catch (err) {
+    console.error("Lỗi lấy danh sách CM", err);
+  }
+}
+
+function renderCmTable(data = cmItems) {
+  const tbody = document.getElementById("cmTableBody");
+  if (!tbody) return;
+  tbody.innerHTML = "";
+  
+  if (data.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;">Không có dữ liệu Chuyền May</td></tr>';
+    return;
+  }
+  
+  data.forEach((item, index) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${index + 1}</td>
+      <td>${item.HinhAnh ? `<img src="${item.HinhAnh}" width="50" height="50" style="object-fit:cover;border-radius:4px;">` : `<div style="width:50px;height:50px;background:#eee;border-radius:4px;display:flex;align-items:center;justify-content:center;color:#999;font-size:0.8rem;">No img</div>`}</td>
+      <td>${item.MaCap3 || ""}</td>
+      <td style="text-align: left; font-weight: 500;">${item.TenVPP}</td>
+      <td>${item.ThuongHieu || ""}</td>
+      <td>${item.NhaCungCap || ""}</td>
+      <td>${item.GhiChu || ""}</td>
+      <td>
+        <button class="btn btn-sm btn-primary" onclick="editCm(${item.Id})"><i class="fas fa-edit"></i> Sửa</button>
+        <button class="btn btn-sm btn-danger" onclick="deleteCm(${item.Id})"><i class="fas fa-trash"></i> Xóa</button>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
 async function loadVppItems() {
   if(!currentToken) return showLogin();
   try {
@@ -196,8 +469,9 @@ async function loadVppItems() {
     }
     if (!res.ok) throw new Error("Lỗi tải danh sách VPP");
     vppItems = await res.json();
-    renderVppTable();
+    applyVppFilters();
     refreshAllDropdowns();
+    loadCap2Dropdown(); // Ensure filters are populated
   } catch (err) {
     console.error(err);
   }
@@ -218,18 +492,23 @@ function refreshAllDropdowns() {
     const valMa = maSel.value;
     const valName = nameSel.value;
     maSel.innerHTML = optionsMaHtml; maSel.value = valMa;
-    nameSel.innerHTML = optionsTenHtml; nameSel.value = valName;
     
-    // Update DVT if an item is selected
-    const selectedItem = vppItems.find(x => x.MaCap3 === valMa || x.TenVPP === valName);
+    // Update DVT and Name if an item is selected based on Ma
+    const selectedItem = vppItems.find(x => x.MaCap3 === valMa);
+    nameSel.innerHTML = optionsTenHtml; 
+    
     if (selectedItem) {
+      nameSel.value = selectedItem.TenVPP; // Auto update name if it changed
       tr.querySelector('.item-dvt').value = selectedItem.DonViTinh || '';
+      if(tr.querySelector('.item-loai')) tr.querySelector('.item-loai').value = selectedItem.Loai || 'VPP';
+    } else {
+      nameSel.value = valName; // Fallback
     }
   });
 
   let optionsMaHtmlExport = `<option value="">Chọn Mã</option>`;
   let optionsTenHtmlExport = `<option value="">Chọn Tên</option>`;
-  vppItems.forEach(item => {
+  vppInventoryItems.forEach(item => {
     if(item.SoLuongTon > 0) {
       if(item.MaCap3) optionsMaHtmlExport += `<option value="${item.MaCap3}">${item.MaCap3}</option>`;
       optionsTenHtmlExport += `<option value="${item.TenVPP}">${item.TenVPP}</option>`;
@@ -246,35 +525,154 @@ function refreshAllDropdowns() {
     nameSel.innerHTML = optionsTenHtmlExport; nameSel.value = valName;
     
     // Update DVT and Ton if an item is selected
-    const selectedItem = vppItems.find(x => x.MaCap3 === valMa || x.TenVPP === valName);
+    const selectedItem = vppInventoryItems.find(x => x.MaCap3 === valMa || x.TenVPP === valName);
     if (selectedItem) {
       tr.querySelector('.item-dvt').value = selectedItem.DonViTinh || '';
       tr.querySelector('.item-ton').value = selectedItem.SoLuongTon || 0;
       tr.querySelector('.item-qty').max = selectedItem.SoLuongTon || 0;
+      if(tr.querySelector('.item-loai')) tr.querySelector('.item-loai').value = selectedItem.Loai || 'VPP';
     }
   });
 }
 
+// --- API Lấy dữ liệu tồn kho ---
+async function loadInventory() {
+  if(!currentToken) return;
+  try {
+    const res = await fetch(`${API_BASE}/vpp/inventory`, {
+      headers: { "Authorization": `Bearer ${currentToken}` }
+    });
+    if (!res.ok) throw new Error("Lỗi tải danh sách tồn kho");
+    vppInventoryItems = await res.json();
+    renderInventoryTable();
+    refreshAllDropdowns();
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+function renderInventoryTable() {
+  const tbody = document.getElementById("vppInventoryTableBody");
+  if(!tbody) return;
+  
+  tbody.innerHTML = vppInventoryItems.map((item, idx) => {
+    return `
+      <tr>
+        <td>${idx + 1}</td>
+        <td>${item.MaCap3 || ''}</td>
+        <td><strong>${item.TenVPP}</strong></td>
+        <td>${item.DonGiaTon ? Math.round(item.DonGiaTon).toLocaleString('vi-VN') : '0'}</td>
+        <td style="font-weight:bold; color:#d35400;">${item.SoLuongTon || 0} ${item.DonViTinh || ''}</td>
+        <td style="font-weight:bold; color:#27ae60;">${item.ThanhTienTon ? Math.round(item.ThanhTienTon).toLocaleString('vi-VN') : '0'} đ</td>
+      </tr>
+    `;
+  }).join("");
+}
+
+
 let currentVppPage = 1;
 const VPP_PER_PAGE = 10;
+let filteredVppItems = [];
+
+function applyVppFilters() {
+  const ma = (document.getElementById("filterVppMa")?.value || "").toLowerCase();
+  const ten = (document.getElementById("filterVppTen")?.value || "").toLowerCase();
+  const brand = (document.getElementById("filterVppThuongHieu")?.value || "").toLowerCase();
+  const ncc = (document.getElementById("filterVppNcc")?.value || "").toLowerCase();
+
+  filteredVppItems = vppItems.filter(item => {
+    const matchMa = (item.MaCap3 || "").toLowerCase().includes(ma);
+    const matchTen = (item.TenVPP || "").toLowerCase().includes(ten);
+    const matchBrand = (item.ThuongHieu || "").toLowerCase().includes(brand);
+    const matchNcc = (item.NhaCungCap || "").toLowerCase().includes(ncc);
+    return matchMa && matchTen && matchBrand && matchNcc;
+  });
+  currentVppPage = 1;
+  renderVppTable();
+}
+
+function clearVppFilters() {
+  if(document.getElementById("filterVppMa")) document.getElementById("filterVppMa").value = "";
+  if(document.getElementById("filterVppTen")) document.getElementById("filterVppTen").value = "";
+  if(document.getElementById("filterVppThuongHieu")) document.getElementById("filterVppThuongHieu").value = "";
+  if(document.getElementById("filterVppNcc")) document.getElementById("filterVppNcc").value = "";
+  applyVppFilters();
+}
+
+async function handleImportExcel() {
+  const fileInput = document.getElementById("importExcelFile");
+  if(!fileInput.files || fileInput.files.length === 0) {
+    return alert("Vui lòng chọn file Excel");
+  }
+
+  const file = fileInput.files[0];
+  const formData = new FormData();
+  formData.append("file", file);
+
+  try {
+    const res = await fetch(`${API_BASE}/vpp/import-excel`, {
+      method: 'POST',
+      headers: {
+        "Authorization": `Bearer ${currentToken}`
+      },
+      body: formData
+    });
+    
+    if(!res.ok) {
+      const errTxt = await res.text();
+      throw new Error(errTxt);
+    }
+    
+    const data = await res.json();
+    alert(`Import thành công! Đã xử lý ${data.count} dòng dữ liệu.`);
+    fileInput.value = "";
+    loadVppItems();
+    loadInventory();
+    loadHistoryData();
+  } catch(err) {
+    alert("Lỗi Import: " + err.message);
+  }
+}
+
+function handleExportExcel() {
+  
+  if (!vppItems || vppItems.length === 0) {
+    return alert("Không có dữ liệu để xuất Excel.");
+  }
+  
+  if (typeof XLSX === "undefined") {
+    return alert("Thư viện Excel chưa được tải, vui lòng thử lại sau.");
+  }
+
+  const excelData = vppItems.map((item, index) => ({
+    "STT": index + 1,
+    "Mã Vật Tư": item.MaCap3 || "",
+    "Tên Vật Tư": item.TenVPP || "",
+    "Đơn Vị Tính": item.DonViTinh || "",
+    "Thương Hiệu / Hãng": item.ThuongHieu || "",
+    "Nhà Cung Cấp": item.NhaCungCap || "",
+    "Ghi Chú": item.GhiChu || ""
+  }));
+
+  const worksheet = XLSX.utils.json_to_sheet(excelData);
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, "Danh_muc_VPP");
+  
+  XLSX.writeFile(workbook, "Danh_muc_VPP.xlsx");
+}
 
 function renderVppTable() {
   const tbody = document.getElementById("vppTableBody");
   const pagination = document.getElementById("vppPagination");
   if(!tbody) return;
 
-  const totalPages = Math.ceil(vppItems.length / VPP_PER_PAGE);
+  const totalPages = Math.ceil(filteredVppItems.length / VPP_PER_PAGE);
   if (currentVppPage > totalPages && totalPages > 0) currentVppPage = totalPages;
 
   const startIndex = (currentVppPage - 1) * VPP_PER_PAGE;
-  const currentItems = vppItems.slice(startIndex, startIndex + VPP_PER_PAGE);
+  const currentItems = filteredVppItems.slice(startIndex, startIndex + VPP_PER_PAGE);
 
   tbody.innerHTML = currentItems.map((item, index) => {
-    const donGia = item.DonGia || 0;
-    const vat = item.VAT || 0;
-    const donGiaVAT = donGia * (1 + vat / 100);
-    const thanhTien = (item.SoLuongTon || 0) * donGiaVAT;
-
     const imgHtml = item.HinhAnh 
       ? `<img src="${item.HinhAnh}" style="width:50px; height:50px; object-fit:contain; border-radius:4px; background-color: #fff;">` 
       : `<div style="width:50px; height:50px; background:#eee; display:flex; align-items:center; justify-content:center; border-radius:4px; font-size:10px; color:#999;">Chưa có</div>`;
@@ -358,27 +756,42 @@ function openEditVppModal(id) {
 }
 
 function calculateEditPriceVat() {
-  const price = parseFloat(document.getElementById('editVppPrice').value) || 0;
-  const vat = parseFloat(document.getElementById('editVppVat').value) || 0;
-  document.getElementById('editVppPriceVat').value = price * (1 + vat / 100);
+  const priceEl = document.getElementById('editVppPrice');
+  const vatEl = document.getElementById('editVppVat');
+  const priceVatEl = document.getElementById('editVppPriceVat');
+  
+  if (priceEl && vatEl && priceVatEl) {
+    const price = parseFloat(priceEl.value) || 0;
+    const vat = parseFloat(vatEl.value) || 0;
+    priceVatEl.value = price * (1 + vat / 100);
+  }
 }
 
-document.getElementById('editVppPrice').addEventListener('input', calculateEditPriceVat);
-document.getElementById('editVppVat').addEventListener('input', calculateEditPriceVat);
+if (document.getElementById('editVppPrice')) {
+  document.getElementById('editVppPrice').addEventListener('input', calculateEditPriceVat);
+}
+if (document.getElementById('editVppVat')) {
+  document.getElementById('editVppVat').addEventListener('input', calculateEditPriceVat);
+}
 
-document.getElementById('closeEditVppModal').addEventListener('click', () => {
-  document.getElementById('editVppModal').style.display = 'none';
-});
-document.getElementById('cancelEditVppBtn').addEventListener('click', () => {
-  document.getElementById('editVppModal').style.display = 'none';
-});
+if (document.getElementById('closeEditVppModal')) {
+  document.getElementById('closeEditVppModal').addEventListener('click', () => {
+    document.getElementById('editVppModal').style.display = 'none';
+  });
+}
+if (document.getElementById('cancelEditVppBtn')) {
+  document.getElementById('cancelEditVppBtn').addEventListener('click', () => {
+    document.getElementById('editVppModal').style.display = 'none';
+  });
+}
 
-document.getElementById('editVppImgContainer').addEventListener('paste', (e) => {
-  e.preventDefault();
-  const items = (e.clipboardData || e.originalEvent.clipboardData).items;
-  for (const item of items) {
-    if (item.type.indexOf('image') === 0) {
-      const blob = item.getAsFile();
+if (document.getElementById('editVppImgContainer')) {
+  document.getElementById('editVppImgContainer').addEventListener('paste', (e) => {
+    e.preventDefault();
+    const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+    for (const item of items) {
+      if (item.type.indexOf('image') === 0) {
+        const blob = item.getAsFile();
       const reader = new FileReader();
       reader.onload = (event) => {
         const base64Str = event.target.result;
@@ -390,9 +803,28 @@ document.getElementById('editVppImgContainer').addEventListener('paste', (e) => 
       reader.readAsDataURL(blob);
     }
   }
-});
+  });
+}
 
-document.getElementById('saveEditVppBtn').addEventListener('click', async () => {
+if (document.getElementById('editVppImage')) {
+  document.getElementById('editVppImage').addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const base64Str = event.target.result;
+        document.getElementById('editVppImageBase64').value = base64Str;
+        document.getElementById('editVppImagePreview').src = base64Str;
+        document.getElementById('editVppImagePreview').style.display = 'block';
+        document.getElementById('editVppImagePlaceholder').style.display = 'none';
+      };
+      reader.readAsDataURL(file);
+    }
+  });
+}
+
+if (document.getElementById('saveEditVppBtn')) {
+  document.getElementById('saveEditVppBtn').addEventListener('click', async () => {
   const id = document.getElementById('editVppId').value;
   const TenVPP = document.getElementById('editVppName').value.trim();
   if(!TenVPP) return showAlert("Vui lòng nhập tên vật tư", false);
@@ -428,6 +860,7 @@ document.getElementById('saveEditVppBtn').addEventListener('click', async () => 
     console.error(err);
   }
 });
+}
 
 async function saveNewVpp() {
   const code = document.getElementById("newVppCode").value.trim();
@@ -497,7 +930,7 @@ async function deleteVpp(id) {
 }
 
 // --- Import Logic ---
-let importRowCount = 0;
+// importRowCount đã được khai báo ở đầu file
 function addImportRow() {
   importRowCount++;
   const tbody = document.getElementById("importTableBody");
@@ -644,6 +1077,7 @@ async function saveImportData() {
     
     // Tải lại danh sách kho
     loadVppItems();
+    loadInventory();
     
   } catch(err) {
     alert(err.message);
@@ -651,7 +1085,7 @@ async function saveImportData() {
 }
 
 // --- Export Logic ---
-let exportRowCount = 0;
+// exportRowCount đã được khai báo ở đầu file
 function addExportRow() {
   exportRowCount++;
   const tbody = document.getElementById("exportTableBody");
@@ -661,10 +1095,10 @@ function addExportRow() {
   
   let optionsMaHtml = `<option value="">Chọn Mã</option>`;
   let optionsTenHtml = `<option value="">Chọn Tên</option>`;
-  vppItems.forEach(item => {
-    if(item.SoLuongTon > 0) {
-      if(item.MaCap3) optionsMaHtml += `<option value="${item.MaCap3}">${item.MaCap3}</option>`;
-      optionsTenHtml += `<option value="${item.TenVPP}">${item.TenVPP}</option>`;
+  vppInventoryItems.forEach(invItem => {
+    if(invItem.SoLuongTon > 0) {
+      if(invItem.MaCap3) optionsMaHtml += `<option value="${invItem.MaCap3}">${invItem.MaCap3}</option>`;
+      optionsTenHtml += `<option value="${invItem.TenVPP}">${invItem.TenVPP}</option>`;
     }
   });
   
@@ -675,6 +1109,7 @@ function addExportRow() {
         ${optionsMaHtml}
       </select>
       <input type="hidden" class="item-id">
+      <input type="hidden" class="item-loai">
     </td>
     <td>
       <select class="form-control item-name" style="width:100%">
@@ -685,6 +1120,8 @@ function addExportRow() {
     <td><input type="text" class="form-control item-ton" readonly style="width:100%; background:#f0f0f0"></td>
     <td><input type="number" class="form-control item-qty" value="1" min="1" style="width:100%"></td>
     <td><input type="text" class="form-control item-receiver" placeholder="Tên người/Phòng ban" style="width:100%"></td>
+    <td><input type="text" class="form-control item-msnv" placeholder="Nhập MSNV" style="width:100%"></td>
+    <td><input type="text" class="form-control item-bophan" placeholder="Nhập Bộ phận" style="width:100%"></td>
     <td><input type="text" class="form-control item-note" style="width:100%"></td>
     <td><button class="btn btn-danger btn-sm" onclick="removeExportRow(${exportRowCount})"><i class="fas fa-trash"></i></button></td>
   `;
@@ -695,9 +1132,10 @@ function addExportRow() {
   
   maInput.addEventListener('change', (e) => {
     const val = e.target.value.trim();
-    const item = vppItems.find(x => x.MaCap3 === val);
+    const item = vppInventoryItems.find(x => x.MaCap3 === val);
     if(item) {
       tr.querySelector('.item-id').value = item.Id;
+      tr.querySelector('.item-loai').value = item.Loai;
       tr.querySelector('.item-name').value = item.TenVPP;
       tr.querySelector('.item-dvt').value = item.DonViTinh;
       tr.querySelector('.item-ton').value = item.SoLuongTon;
@@ -707,9 +1145,10 @@ function addExportRow() {
 
   nameInput.addEventListener('change', (e) => {
     const val = e.target.value.trim();
-    const item = vppItems.find(x => x.TenVPP === val);
+    const item = vppInventoryItems.find(x => x.TenVPP === val);
     if(item) {
       tr.querySelector('.item-id').value = item.Id;
+      tr.querySelector('.item-loai').value = item.Loai;
       tr.querySelector('.item-ma').value = item.MaCap3 || '';
       tr.querySelector('.item-dvt').value = item.DonViTinh;
       tr.querySelector('.item-ton').value = item.SoLuongTon;
@@ -740,8 +1179,11 @@ async function saveExportData() {
 
     items.push({
       VppId: vppId,
+      Loai: tr.querySelector('.item-loai') ? tr.querySelector('.item-loai').value : 'VPP',
       SoLuong: qty,
       NguoiNhan: tr.querySelector('.item-receiver').value,
+      MSNV: tr.querySelector('.item-msnv').value,
+      BoPhan: tr.querySelector('.item-bophan').value,
       GhiChu: tr.querySelector('.item-note').value
     });
   }
@@ -778,12 +1220,15 @@ async function saveExportData() {
     addExportRow();
     
     loadVppItems(); // Cập nhật lại tồn kho
+    loadInventory();
   } catch(err) {
     alert(err.message);
   }
 }
 
-// --- History Logic ---
+let vppHistoryItems = [];
+let filteredHistoryItems = [];
+
 async function loadHistoryData() {
   try {
     const res = await fetch(`${API_BASE}/vpp/history`, {
@@ -796,35 +1241,72 @@ async function loadHistoryData() {
     }
     if (!res.ok) throw new Error("Lỗi tải lịch sử");
     
-    const data = await res.json();
-    const tbody = document.getElementById("historyTableBody");
-    if(!tbody) return;
-    
-    tbody.innerHTML = data.map(item => {
-      const badge = item.Loai === 'NHAP' 
-        ? '<span style="background: #2ecc71; color: #fff; padding: 2px 6px; border-radius: 4px; font-size:0.8rem">NHẬP</span>'
-        : '<span style="background: #e67e22; color: #fff; padding: 2px 6px; border-radius: 4px; font-size:0.8rem">XUẤT</span>';
-        
-      const donGiaStr = item.DonGia != null ? item.DonGia.toLocaleString('vi-VN') : '-';
-      const donGiaVATStr = item.DonGia != null ? (item.DonGia * (1 + item.VAT/100)).toLocaleString('vi-VN') : '-';
-      const thanhTienStr = item.ThanhTien != null ? item.ThanhTien.toLocaleString('vi-VN') : '-';
-      const nguoiNhap = item.NguoiThucHien || item.NguoiNhan || '';
-
-      return `
-        <tr>
-          <td>${item.MaCap3 || ''}</td>
-          <td>${badge}</td>
-          <td>${item.TenVPP}</td>
-          <td><strong>${item.SoLuong}</strong></td>
-          <td>${donGiaStr}</td>
-          <td>${donGiaVATStr}</td>
-          <td style="color:#0056b3; font-weight:bold">${thanhTienStr}</td>
-          <td>${nguoiNhap}</td>
-          <td>${item.ThoiGian}</td>
-        </tr>
-      `;
-    }).join("");
+    vppHistoryItems = await res.json();
+    applyHistoryFilters();
   } catch(err) {
     console.error(err);
   }
+}
+
+function applyHistoryFilters() {
+  const ma = (document.getElementById("filterHistoryMa")?.value || "").toLowerCase();
+  const loai = document.getElementById("filterHistoryTrangThai")?.value || "";
+  const donGiaQuery = (document.getElementById("filterHistoryDonGia")?.value || "").replace(/\./g, '').trim();
+
+  filteredHistoryItems = vppHistoryItems.filter(item => {
+    const matchMa = (item.MaCap3 || "").toLowerCase().includes(ma);
+    const matchLoai = loai ? item.Loai === loai : true;
+    
+    let matchDonGia = true;
+    if(donGiaQuery) {
+      const g = item.DonGia || 0;
+      const gVat = g * (1 + (item.VAT||0)/100);
+      matchDonGia = g.toString().includes(donGiaQuery) || gVat.toString().includes(donGiaQuery);
+    }
+    return matchMa && matchLoai && matchDonGia;
+  });
+  renderHistoryTable();
+}
+
+function clearHistoryFilters() {
+  if(document.getElementById("filterHistoryMa")) document.getElementById("filterHistoryMa").value = "";
+  if(document.getElementById("filterHistoryTrangThai")) document.getElementById("filterHistoryTrangThai").value = "";
+  if(document.getElementById("filterHistoryDonGia")) document.getElementById("filterHistoryDonGia").value = "";
+  applyHistoryFilters();
+}
+
+function renderHistoryTable() {
+  const tbody = document.getElementById("historyTableBody");
+  if(!tbody) return;
+  
+  tbody.innerHTML = filteredHistoryItems.map(item => {
+    const badge = item.Loai === 'NHAP' 
+      ? '<span style="background: #2ecc71; color: #fff; padding: 2px 6px; border-radius: 4px; font-size:0.8rem">NHẬP</span>'
+      : '<span style="background: #e67e22; color: #fff; padding: 2px 6px; border-radius: 4px; font-size:0.8rem">XUẤT</span>';
+      
+    const donGiaStr = item.DonGia != null ? Math.round(item.DonGia).toLocaleString('vi-VN') : '-';
+    const donGiaVATStr = (item.DonGia != null && item.VAT != null) ? Math.round(item.DonGia * (1 + item.VAT/100)).toLocaleString('vi-VN') : '-';
+    const thanhTienStr = item.ThanhTien != null ? Math.round(item.ThanhTien).toLocaleString('vi-VN') : '-';
+    const nguoiNhap = item.NguoiThucHien || '';
+    const nguoiNhan = item.NguoiNhan || '';
+    const msnv = item.MSNV || '';
+    const boPhan = item.BoPhan || '';
+
+    return `
+      <tr>
+        <td>${item.MaCap3 || ''}</td>
+        <td>${badge}</td>
+        <td>${item.TenVPP}</td>
+        <td><strong>${item.SoLuong}</strong></td>
+        <td>${donGiaStr}</td>
+        <td>${donGiaVATStr}</td>
+        <td style="color:#0056b3; font-weight:bold">${thanhTienStr}</td>
+        <td>${nguoiNhap}</td>
+        <td>${nguoiNhan}</td>
+        <td>${msnv}</td>
+        <td>${boPhan}</td>
+        <td>${item.ThoiGian}</td>
+      </tr>
+    `;
+  }).join("");
 }

@@ -391,6 +391,64 @@ const vppPoolPromise = new sql.ConnectionPool(configVPP)
     console.error("❌ Kết nối CSDL thất bại (QuanLyVanPhongPham): ", err);
   });
 
+vppPoolPromise.then(async (pool) => {
+  try {
+    await pool.request().query(`
+      IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'TONKHO_VPP')
+      BEGIN
+        CREATE TABLE dbo.TONKHO_VPP (
+          Id INT IDENTITY(1,1) PRIMARY KEY,
+          VppId INT NOT NULL FOREIGN KEY REFERENCES dbo.VANPHONGPHAM(Id),
+          SoLuongTon FLOAT DEFAULT 0,
+          DonGiaTon FLOAT DEFAULT 0,
+          ThanhTienTon AS (SoLuongTon * DonGiaTon)
+        );
+      END
+      ELSE IF COL_LENGTH('dbo.TONKHO_VPP', 'DonGiaTon') IS NULL
+      BEGIN
+        ALTER TABLE dbo.TONKHO_VPP DROP COLUMN DonGiaVAT;
+        ALTER TABLE dbo.TONKHO_VPP DROP COLUMN ThanhTienTon;
+        
+        ALTER TABLE dbo.TONKHO_VPP ADD DonGiaTon FLOAT DEFAULT 0;
+        EXEC('UPDATE dbo.TONKHO_VPP SET DonGiaTon = ISNULL(DonGia, 0) * (1 + ISNULL(VAT, 0)/100)');
+        
+        DECLARE @Constraint1 nvarchar(200);
+        SELECT @Constraint1 = Name FROM sys.default_constraints WHERE parent_object_id = OBJECT_ID('dbo.TONKHO_VPP') AND parent_column_id = COLUMNPROPERTY(OBJECT_ID('dbo.TONKHO_VPP'), 'DonGia', 'ColumnId');
+        IF @Constraint1 IS NOT NULL EXEC('ALTER TABLE dbo.TONKHO_VPP DROP CONSTRAINT ' + @Constraint1);
+
+        DECLARE @Constraint2 nvarchar(200);
+        SELECT @Constraint2 = Name FROM sys.default_constraints WHERE parent_object_id = OBJECT_ID('dbo.TONKHO_VPP') AND parent_column_id = COLUMNPROPERTY(OBJECT_ID('dbo.TONKHO_VPP'), 'VAT', 'ColumnId');
+        IF @Constraint2 IS NOT NULL EXEC('ALTER TABLE dbo.TONKHO_VPP DROP CONSTRAINT ' + @Constraint2);
+
+        ALTER TABLE dbo.TONKHO_VPP DROP COLUMN DonGia;
+        ALTER TABLE dbo.TONKHO_VPP DROP COLUMN VAT;
+        
+        ALTER TABLE dbo.TONKHO_VPP ADD ThanhTienTon AS (SoLuongTon * DonGiaTon);
+      END
+      
+      IF COL_LENGTH('dbo.VANPHONGPHAM', 'SoLuongTon') IS NOT NULL
+      BEGIN
+        EXEC('
+          INSERT INTO dbo.TONKHO_VPP (VppId, SoLuongTon)
+          SELECT Id, SoLuongTon FROM dbo.VANPHONGPHAM 
+          WHERE SoLuongTon > 0 AND NOT EXISTS (SELECT 1 FROM dbo.TONKHO_VPP WHERE VppId = dbo.VANPHONGPHAM.Id)
+        ');
+        
+        -- Drop default constraint if any
+        DECLARE @ConstraintName nvarchar(200)
+        SELECT @ConstraintName = Name FROM sys.default_constraints WHERE parent_object_id = OBJECT_ID('dbo.VANPHONGPHAM') AND parent_column_id = COLUMNPROPERTY(OBJECT_ID('dbo.VANPHONGPHAM'), 'SoLuongTon', 'ColumnId')
+        IF @ConstraintName IS NOT NULL
+          EXEC('ALTER TABLE dbo.VANPHONGPHAM DROP CONSTRAINT ' + @ConstraintName)
+
+        ALTER TABLE dbo.VANPHONGPHAM DROP COLUMN SoLuongTon;
+      END
+    `);
+    console.log("✅ VPP Schema updated for TONKHO_VPP");
+  } catch (err) {
+    console.error("❌ VPP Schema update error:", err);
+  }
+});
+
   poolPromise.then(async (pool) => {
     console.log("✅ Kết nối SQL Server thành công");
 
@@ -737,7 +795,7 @@ app.post(
   authorizeAdmin,
   async (req, res) => {
     const items = req.body || [];
-    require('fs').writeFileSync('C:/Laptrinhweb/webcty2/scratch/payload.json', JSON.stringify(items, null, 2));
+    // require('fs').writeFileSync('C:/Laptrinhweb/webcty2/scratch/payload.json', JSON.stringify(items, null, 2));
     if (!Array.isArray(items) || items.length === 0)
       return res.status(400).send("Không có dữ liệu");
 

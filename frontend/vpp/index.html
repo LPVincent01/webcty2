@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Quản Lý Văn Phòng Phẩm</title>
+  <title>Quản Lý Vật Tư</title>
 
   <!-- Icons & Chart -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
@@ -48,7 +48,7 @@
   <div class="app-container" id="appContainer" style="display: none">
     <header class="header">
       <div style="width: 150px;"></div> <!-- Spacer để cân bằng với user-menu -->
-      <h1 style="text-align: center; flex: 1;">Quản Lý Văn Phòng Phẩm</h1>
+      <h1 style="text-align: center; flex: 1;">Quản Lý Vật Tư</h1>
       <div class="user-menu" style="min-width: 150px; justify-content: flex-end;">
         <img id="userAvatar" src="https://ui-avatars.com/api/?name=User&background=3498db&color=fff" alt="User Avatar" />
         <span id="currentUserText" class="current-user-text">Chưa đăng nhập</span>
@@ -65,9 +65,32 @@
       <aside class="sidebar">
         <ul class="sidebar-menu">
           <li>
-            <a href="#" class="active" data-section="list">
-              <i class="fa-solid fa-boxes-stacked icon-blue"></i>
-              <span>Văn phòng phẩm</span>
+            <div class="menu-item-with-submenu" style="display: flex; align-items: center; justify-content: space-between; padding: 12px 15px; cursor: pointer; color: #495057; font-weight: 500; background: #e3f2fd; border-radius: 8px;" id="toggleThongTinVatTu">
+              <div>
+                <i class="fa-solid fa-boxes-stacked icon-blue" style="margin-right: 10px; width: 20px; text-align: center;"></i>
+                <span>Thông tin Vật Tư</span>
+              </div>
+              <i class="fas fa-chevron-down" id="iconThongTinVatTu"></i>
+            </div>
+            <ul class="submenu" id="submenuThongTinVatTu" style="list-style: none; padding-left: 10px; margin: 5px 0 0 0; display: block;">
+              <li>
+                <a href="#" class="active" data-section="list">
+                  <i class="fa-solid fa-paperclip" style="color: #3498db;"></i>
+                  <span>Danh mục Văn phòng phẩm</span>
+                </a>
+              </li>
+              <li>
+                <a href="#" data-section="chuyenmay">
+                  <i class="fa-solid fa-scissors" style="color: #e67e22;"></i>
+                  <span>Danh mục Chuyền May</span>
+                </a>
+              </li>
+            </ul>
+          </li>
+          <li>
+            <a href="#" data-section="inventory">
+              <i class="fa-solid fa-warehouse" style="color: #9b59b6;"></i>
+              <span>Tồn Kho</span>
             </a>
           </li>
           <li>
@@ -94,12 +117,31 @@
       <main class="content-area">
         <!-- Section: Danh mục VPP -->
         <section class="content-section" id="vpp-listSection">
-          <div class="section-header">
-            <div>
-              <h2 class="section-title">Danh Mục Văn Phòng Phẩm</h2>
-              <p class="section-description">Quản lý danh sách các vật tư, số lượng tồn kho</p>
+          <div class="table-header" style="display: flex; flex-wrap: nowrap; justify-content: space-between; align-items: stretch; padding-bottom: 1rem; border-bottom: 1px solid #eee; margin-bottom: 15px; gap: 20px;">
+            <div style="display: flex; flex-direction: column; gap: 12px; flex: 1 1 auto; min-width: 0;">
+              <h3 style="margin: 0; display: flex; align-items: center; gap: 8px;"><span class="table-title">Vật Tư Văn Phòng Phẩm</span></h3>
+              <p class="section-description" style="margin:0;">Quản lý danh sách các vật tư, số lượng tồn kho</p>
+              <div class="table-filters" style="display: flex; align-items: center; flex-wrap: wrap; gap: 8px;">
+                <select id="filterVppMa" style="padding: 0 10px; border-radius: 8px; height: 36px; border: 1px solid #ddd; outline: none; font-size: 0.9rem; min-width: 150px;">
+                  <option value="">-- Mã Vật Tư (Tất cả) --</option>
+                </select>
+                <input type="text" id="filterVppTen" placeholder="Tên Vật Tư" style="padding: 0 10px; border-radius: 8px; height: 36px; border: 1px solid #ddd; outline: none; font-size: 0.9rem; min-width: 200px;" />
+                <input type="text" id="filterVppThuongHieu" placeholder="Thương Hiệu / Hãng" style="padding: 0 10px; border-radius: 8px; height: 36px; border: 1px solid #ddd; outline: none; font-size: 0.9rem;" />
+                <input type="text" id="filterVppNcc" placeholder="Nhà cung cấp" style="padding: 0 10px; border-radius: 8px; height: 36px; border: 1px solid #ddd; outline: none; font-size: 0.9rem;" />
+              </div>
             </div>
-            <button class="btn btn-primary" id="addVppBtn"><i class="fas fa-plus"></i> Thêm VPP mới</button>
+            <div class="table-actions" style="display: flex; gap: 5px; flex-wrap: wrap; justify-content: flex-end; align-items: flex-end; padding-left: 20px; border-left: 1px solid #e2e8f0; flex: 0 0 auto; max-width: 550px;">
+              <button class="btn btn-primary" id="btnFilterVppList" style="height: 36px; padding: 0 16px; border-radius: 8px;"><i class="fas fa-search"></i> Tra cứu</button>
+              <button class="btn btn-secondary" id="btnClearVppFilter" style="height: 36px; padding: 0 16px; border-radius: 8px;"><i class="fas fa-times"></i> Xóa bộ lọc</button>
+              <div style="position: relative; display: inline-block;">
+                <button class="btn btn-success" id="btnExcelDropdown" style="height: 36px; padding: 0 16px; border-radius: 8px; cursor: pointer;"><i class="fas fa-file-excel"></i> Excel <i class="fas fa-chevron-down" style="font-size: 0.8rem; margin-left: 5px;"></i></button>
+                <div id="excelDropdownContent" style="display: none; position: absolute; top: 100%; right: 0; background-color: white; min-width: 180px; box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2); z-index: 10; border-radius: 8px; margin-top: 5px; overflow: hidden;">
+                  <div id="btnOpenImportModal" style="color: #333; padding: 12px 16px; text-decoration: none; display: block; border-bottom: 1px solid #eee; font-size: 0.95rem; cursor: pointer;" onmouseover="this.style.backgroundColor='#f0f0f0'" onmouseout="this.style.backgroundColor='white'"><i class="fas fa-upload" style="margin-right: 8px; color: #27ae60;"></i> Import Excel</div>
+                  <div id="btnExportExcel" style="color: #333; padding: 12px 16px; text-decoration: none; display: block; font-size: 0.95rem; cursor: pointer;" onmouseover="this.style.backgroundColor='#f0f0f0'" onmouseout="this.style.backgroundColor='white'"><i class="fas fa-download" style="margin-right: 8px; color: #2980b9;"></i> Excelout</div>
+                </div>
+              </div>
+              <button class="btn btn-primary" id="addVppBtn" style="height: 36px; padding: 0 16px; border-radius: 8px;"><i class="fas fa-plus"></i> Thêm mới</button>
+            </div>
           </div>
           <div class="table-container">
             <table class="data-table">
@@ -125,14 +167,94 @@
           </div>
         </section>
 
+        <!-- Section: Danh mục Chuyền May -->
+        <section class="content-section" id="vpp-chuyenmaySection" style="display: none;">
+          <div class="table-header" style="display: flex; flex-wrap: nowrap; justify-content: space-between; align-items: stretch; padding-bottom: 1rem; border-bottom: 1px solid #eee; margin-bottom: 15px; gap: 20px;">
+            <div style="display: flex; flex-direction: column; gap: 12px; flex: 1 1 auto; min-width: 0;">
+              <h3 style="margin: 0; display: flex; align-items: center; gap: 8px;"><span class="table-title">Vật Tư Chuyền May</span></h3>
+              <p class="section-description" style="margin:0;">Quản lý danh sách các vật tư, số lượng tồn kho</p>
+              <div class="table-filters" style="display: flex; align-items: center; flex-wrap: wrap; gap: 8px;">
+                <select id="filterCmMa" style="padding: 0 10px; border-radius: 8px; height: 36px; border: 1px solid #ddd; outline: none; font-size: 0.9rem; min-width: 150px;">
+                  <option value="">-- Mã Vật Tư (Tất cả) --</option>
+                </select>
+                <input type="text" id="filterCmTen" placeholder="Tên Vật Tư" style="padding: 0 10px; border-radius: 8px; height: 36px; border: 1px solid #ddd; outline: none; font-size: 0.9rem; min-width: 200px;" />
+                <input type="text" id="filterCmThuongHieu" placeholder="Thương Hiệu / Hãng" style="padding: 0 10px; border-radius: 8px; height: 36px; border: 1px solid #ddd; outline: none; font-size: 0.9rem;" />
+                <input type="text" id="filterCmNcc" placeholder="Nhà cung cấp" style="padding: 0 10px; border-radius: 8px; height: 36px; border: 1px solid #ddd; outline: none; font-size: 0.9rem;" />
+              </div>
+            </div>
+            <div class="table-actions" style="display: flex; gap: 5px; flex-wrap: wrap; justify-content: flex-end; align-items: flex-end; padding-left: 20px; border-left: 1px solid #e2e8f0; flex: 0 0 auto; max-width: 550px;">
+              <button class="btn btn-primary" id="btnFilterCmList" style="height: 36px; padding: 0 16px; border-radius: 8px;"><i class="fas fa-search"></i> Tra cứu</button>
+              <button class="btn btn-secondary" id="btnClearCmFilter" style="height: 36px; padding: 0 16px; border-radius: 8px;"><i class="fas fa-times"></i> Xóa bộ lọc</button>
+              <div style="position: relative; display: inline-block;">
+                <button class="btn btn-success" id="btnCmExcelDropdown" style="height: 36px; padding: 0 16px; border-radius: 8px; cursor: pointer;"><i class="fas fa-file-excel"></i> Excel <i class="fas fa-chevron-down" style="font-size: 0.8rem; margin-left: 5px;"></i></button>
+                <div id="cmExcelDropdownContent" style="display: none; position: absolute; top: 100%; right: 0; background-color: white; min-width: 180px; box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2); z-index: 10; border-radius: 8px; margin-top: 5px; overflow: hidden;">
+                  <div id="btnCmOpenImportModal" style="color: #333; padding: 12px 16px; text-decoration: none; display: block; border-bottom: 1px solid #eee; font-size: 0.95rem; cursor: pointer;" onmouseover="this.style.backgroundColor='#f0f0f0'" onmouseout="this.style.backgroundColor='white'"><i class="fas fa-upload" style="margin-right: 8px; color: #27ae60;"></i> Import Excel</div>
+                  <div id="btnCmExportExcel" style="color: #333; padding: 12px 16px; text-decoration: none; display: block; font-size: 0.95rem; cursor: pointer;" onmouseover="this.style.backgroundColor='#f0f0f0'" onmouseout="this.style.backgroundColor='white'"><i class="fas fa-download" style="margin-right: 8px; color: #2980b9;"></i> Excelout</div>
+                </div>
+              </div>
+              <button class="btn btn-primary" id="addCmBtn" style="height: 36px; padding: 0 16px; border-radius: 8px;"><i class="fas fa-plus"></i> Thêm mới</button>
+            </div>
+          </div>
+          <div class="table-container">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th style="width: 50px;">STT</th>
+                  <th style="width: 80px;">HÌNH ẢNH</th>
+                  <th style="width: 100px;">MÃ VẬT TƯ (CM)</th>
+                  <th style="width: 200px;">TÊN VẬT TƯ</th>
+                  <th style="width: 150px;">THƯƠNG HIỆU / HÃNG</th>
+                  <th style="width: 150px;">NHÀ CUNG CẤP</th>
+                  <th>GHI CHÚ</th>
+                  <th style="width: 80px;">THAO TÁC</th>
+                </tr>
+              </thead>
+              <tbody id="cmTableBody">
+                <!-- Data injected by JS -->
+              </tbody>
+            </table>
+            <div id="cmPagination" style="margin-top: 15px; display: flex; justify-content: flex-end; gap: 5px;">
+              <!-- Pagination injected by JS -->
+            </div>
+          </div>
+        </section>
+        <!-- Section: Tồn Kho -->
+        <section class="content-section" id="vpp-inventorySection" style="display: none;">
+          <div class="table-header" style="display: flex; flex-wrap: nowrap; justify-content: space-between; align-items: stretch; padding-bottom: 1rem; border-bottom: 1px solid #eee; margin-bottom: 15px; gap: 20px;">
+            <div style="display: flex; flex-direction: column; gap: 12px; flex: 1 1 auto; min-width: 0;">
+              <h3 style="margin: 0; display: flex; align-items: center; gap: 8px;"><span class="table-title">Kho Hàng Vật Tư</span></h3>
+              <p class="section-description" style="margin:0;">Lưu trữ thông tin các mặt hàng đang tồn kho</p>
+            </div>
+          </div>
+          <div class="table-container">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th style="width: 50px;">STT</th>
+                  <th style="width: 100px;">MÃ VẬT TƯ</th>
+                  <th style="width: 250px;">TÊN VẬT TƯ</th>
+                  <th style="width: 150px;">ĐƠN GIÁ (TỒN)</th>
+                  <th style="width: 100px;">TỒN KHO</th>
+                  <th style="width: 150px;">THÀNH TIỀN TỒN</th>
+                </tr>
+              </thead>
+              <tbody id="vppInventoryTableBody">
+                <!-- Data injected by JS -->
+              </tbody>
+            </table>
+          </div>
+        </section>
+
         <!-- Section: Nhập hàng -->
         <section class="content-section" id="vpp-importSection" style="display: none;">
-          <div class="section-header">
-            <div>
-              <h2 class="section-title">Nhập Hàng Văn Phòng Phẩm</h2>
-              <p class="section-description">Nhập số lượng lớn vật tư vào kho</p>
+          <div class="table-header" style="display: flex; flex-wrap: nowrap; justify-content: space-between; align-items: stretch; padding-bottom: 1rem; border-bottom: 1px solid #eee; margin-bottom: 15px; gap: 20px;">
+            <div style="display: flex; flex-direction: column; gap: 12px; flex: 1 1 auto; min-width: 0;">
+              <h3 style="margin: 0; display: flex; align-items: center; gap: 8px;"><span class="table-title">Nhập Kho Văn Phòng Phẩm</span></h3>
+              <p class="section-description" style="margin:0;">Thông tin nhập kho</p>
             </div>
-            <button class="btn btn-success" id="saveImportBtn"><i class="fas fa-save"></i> Lưu Phiếu Nhập</button>
+            <div class="table-actions" style="display: flex; gap: 5px; flex-wrap: wrap; justify-content: flex-end; align-items: flex-end; padding-left: 20px; border-left: 1px solid #e2e8f0; flex: 0 0 auto; max-width: 450px;">
+              <button class="btn btn-success" id="saveImportBtn" style="height: 36px; padding: 0 16px; border-radius: 8px;"><i class="fas fa-save"></i> Lưu Phiếu Nhập</button>
+            </div>
           </div>
           <div class="table-container" style="overflow-x: auto;">
             <table class="data-table import-table">
@@ -161,12 +283,14 @@
         
         <!-- Section: Xuất kho -->
         <section class="content-section" id="vpp-exportSection" style="display: none;">
-          <div class="section-header">
-            <div>
-              <h2 class="section-title">Xuất Kho Văn Phòng Phẩm</h2>
-              <p class="section-description">Cấp phát vật tư cho nhân viên/phòng ban</p>
+          <div class="table-header" style="display: flex; flex-wrap: nowrap; justify-content: space-between; align-items: stretch; padding-bottom: 1rem; border-bottom: 1px solid #eee; margin-bottom: 15px; gap: 20px;">
+            <div style="display: flex; flex-direction: column; gap: 12px; flex: 1 1 auto; min-width: 0;">
+              <h3 style="margin: 0; display: flex; align-items: center; gap: 8px;"><span class="table-title">Xuất Kho Văn Phòng Phẩm</span></h3>
+              <p class="section-description" style="margin:0;">Cấp phát vật tư cho nhân viên/phòng ban</p>
             </div>
-            <button class="btn btn-warning" id="saveExportBtn"><i class="fas fa-hand-holding-box"></i> Lưu Phiếu Xuất</button>
+            <div class="table-actions" style="display: flex; gap: 5px; flex-wrap: wrap; justify-content: flex-end; align-items: flex-end; padding-left: 20px; border-left: 1px solid #e2e8f0; flex: 0 0 auto; max-width: 450px;">
+              <button class="btn btn-warning" id="saveExportBtn" style="height: 36px; padding: 0 16px; border-radius: 8px;"><i class="fas fa-hand-holding-box"></i> Lưu Phiếu Xuất</button>
+            </div>
           </div>
           <div class="table-container" style="overflow-x: auto;">
             <table class="data-table import-table">
@@ -174,11 +298,13 @@
                 <tr>
                   <th style="width: 50px;">STT</th>
                   <th style="width: 120px;">MÃ VPP</th>
-                  <th style="width: 250px;">TÊN VẬT TƯ</th>
-                  <th style="width: 80px;">ĐVT</th>
-                  <th style="width: 100px;">TỒN KHO</th>
-                  <th style="width: 100px;">SL XUẤT</th>
-                  <th style="width: 200px;">NGƯỜI NHẬN</th>
+                  <th style="width: 200px;">TÊN VẬT TƯ</th>
+                  <th style="width: 60px;">ĐVT</th>
+                  <th style="width: 80px;">TỒN KHO</th>
+                  <th style="width: 80px;">SL XUẤT</th>
+                  <th style="width: 150px;">NGƯỜI NHẬN</th>
+                  <th style="width: 100px;">MSNV</th>
+                  <th style="width: 120px;">BỘ PHẬN</th>
                   <th>GHI CHÚ</th>
                   <th style="width: 50px;">Xóa</th>
                 </tr>
@@ -193,18 +319,32 @@
 
         <!-- Section: Lịch sử giao dịch -->
         <section class="content-section" id="vpp-historySection" style="display: none;">
-          <div class="section-header">
-            <div>
-              <h2 class="section-title">Lịch sử nhập/xuất kho</h2>
-              <p class="section-description">Xem lại các lần nhập/xuất kho</p>
+          <div class="table-header" style="display: flex; flex-wrap: nowrap; justify-content: space-between; align-items: stretch; padding-bottom: 1rem; border-bottom: 1px solid #eee; margin-bottom: 15px; gap: 20px;">
+            <div style="display: flex; flex-direction: column; gap: 12px; flex: 1 1 auto; min-width: 0;">
+              <h3 style="margin: 0; display: flex; align-items: center; gap: 8px;"><span class="table-title">Lịch sử nhập/xuất kho</span></h3>
+              <p class="section-description" style="margin:0;">Xem lại các lần nhập/xuất kho</p>
+              <div class="table-filters" style="display: flex; align-items: center; flex-wrap: wrap; gap: 8px;">
+                <select id="filterHistoryMa" style="padding: 0 10px; border-radius: 8px; height: 36px; border: 1px solid #ddd; outline: none; font-size: 0.9rem; min-width: 150px;">
+                  <option value="">-- Mã Vật Tư (Tất cả) --</option>
+                </select>
+                <select id="filterHistoryTrangThai" style="border-radius: 8px; border: 1px solid #ddd; padding: 0 10px; height: 36px; outline: none; font-size: 0.9rem;">
+                  <option value="">-- Chọn Trạng thái --</option>
+                  <option value="NHAP">NHẬP</option>
+                  <option value="XUAT">XUẤT</option>
+                </select>
+                <input type="text" id="filterHistoryDonGia" placeholder="Đơn giá / Đơn giá (VAT)" style="padding: 0 10px; border-radius: 8px; height: 36px; border: 1px solid #ddd; outline: none; font-size: 0.9rem; min-width: 180px;" />
+              </div>
             </div>
-            <button class="btn btn-primary" id="refreshHistoryBtn"><i class="fas fa-sync-alt"></i> Làm mới</button>
+            <div class="table-actions" style="display: flex; gap: 5px; flex-wrap: wrap; justify-content: flex-end; align-items: flex-end; padding-left: 20px; border-left: 1px solid #e2e8f0; flex: 0 0 auto; max-width: 450px;">
+              <button class="btn btn-primary" id="btnFilterHistoryList" style="height: 36px; padding: 0 16px; border-radius: 8px;"><i class="fas fa-search"></i> Tra cứu</button>
+              <button class="btn btn-secondary" id="btnClearHistoryFilter" style="height: 36px; padding: 0 16px; border-radius: 8px;"><i class="fas fa-times"></i> Xóa bộ lọc</button>
+            </div>
           </div>
           <div class="table-container">
             <table class="data-table">
               <thead>
                 <tr>
-                  <th>Mã VPP</th>
+                  <th>Mã Vật Tư</th>
                   <th>Trạng thái</th>
                   <th>Tên Vật Tư</th>
                   <th>Số Lượng</th>
@@ -212,6 +352,9 @@
                   <th>Đơn Giá (VAT)</th>
                   <th>Thành Tiền</th>
                   <th>Người Nhập</th>
+                  <th>Người Nhận</th>
+                  <th>MSNV</th>
+                  <th>Bộ phận</th>
                   <th>Thời gian</th>
                 </tr>
               </thead>
@@ -230,7 +373,7 @@
   <div id="addVppModal" class="modal" style="display: none;">
     <div class="modal-content" style="max-width: 700px; margin: 8% auto; padding: 25px; background: #fff; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.2);">
       <div class="modal-header" style="display: flex; justify-content: space-between; border-bottom: 2px solid #eee; padding-bottom: 15px; margin-bottom: 20px;">
-        <h3 style="margin: 0; color: #2c3e50; font-size: 1.5rem;">Thêm Văn Phòng Phẩm Mới</h3>
+        <h3 style="margin: 0; color: #2c3e50; font-size: 1.5rem;" id="addModalTitle">Thêm Văn Phòng Phẩm Mới</h3>
         <span class="close" id="closeAddVppModal" style="cursor: pointer; font-size: 1.8rem; color: #999; line-height: 1;">&times;</span>
       </div>
       <div class="modal-body" style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
@@ -295,6 +438,10 @@
           </div>
           <input type="hidden" id="editVppId">
           <input type="hidden" id="editVppImageBase64">
+          <div class="form-group" style="margin-top: 15px; text-align: left;">
+            <label style="font-weight: 600; color: #444; margin-bottom: 5px; display: block;">Hoặc chọn tệp</label>
+            <input type="file" id="editVppImage" accept="image/*" class="form-control" style="width: 100%; padding: 5px; border: 1px solid #ccc; border-radius: 6px;">
+          </div>
         </div>
         <!-- Cột Phải: Thông tin -->
         <div>
@@ -317,32 +464,34 @@
             </div>
           </div>
           <div class="form-group" style="margin-bottom: 15px;">
-            <label style="font-weight: 600; color: #444; margin-bottom: 5px; display: block;">Đơn Giá Sau VAT (VNĐ)</label>
-            <input type="number" id="editVppPriceVat" class="form-control" style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; background: #e9ecef;" readonly>
-          </div>
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
-            <div class="form-group" style="margin-bottom: 15px;">
-              <label style="font-weight: 600; color: #444; margin-bottom: 5px; display: block;">Thương Hiệu / Hãng</label>
-              <input type="text" id="editVppBrand" class="form-control" style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px;" placeholder="VD: Thiên Long">
-            </div>
-            <div class="form-group" style="margin-bottom: 15px;">
-              <label style="font-weight: 600; color: #444; margin-bottom: 5px; display: block;">Nhà Cung Cấp</label>
-              <input type="text" id="editVppSupplier" class="form-control" style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px;" placeholder="VD: Cty ABC">
-            </div>
+            <label style="font-weight: 600; color: #444; margin-bottom: 5px; display: block;">Đơn Giá sau VAT</label>
+            <input type="number" id="editVppPriceVat" class="form-control" readonly style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; background-color: #e9ecef;">
           </div>
           <div class="form-group" style="margin-bottom: 15px;">
-            <label style="font-weight: 600; color: #444; margin-bottom: 5px; display: block;">Ghi Chú Khác</label>
-            <input type="text" id="editVppNote" class="form-control" style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px;" placeholder="Ghi chú thêm...">
+            <label style="font-weight: 600; color: #444; margin-bottom: 5px; display: block;">Thương hiệu / Hãng</label>
+            <input type="text" id="editVppBrand" class="form-control" style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px;">
+          </div>
+          <div class="form-group" style="margin-bottom: 15px;">
+            <label style="font-weight: 600; color: #444; margin-bottom: 5px; display: block;">Nhà cung cấp</label>
+            <input type="text" id="editVppSupplier" class="form-control" style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px;">
+          </div>
+          <div class="form-group" style="margin-bottom: 15px;">
+            <label style="font-weight: 600; color: #444; margin-bottom: 5px; display: block;">Ghi chú</label>
+            <textarea id="editVppNote" class="form-control" style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; min-height: 80px;"></textarea>
           </div>
         </div>
       </div>
-      <div class="modal-footer" style="margin-top: 25px; text-align: right; border-top: 1px solid #eee; padding-top: 15px;">
+      <div class="modal-footer" style="margin-top: 20px; border-top: 2px solid #eee; padding-top: 15px; text-align: right;">
         <button class="btn btn-secondary" id="cancelEditVppBtn" style="margin-right: 10px; padding: 10px 20px;">Hủy</button>
         <button class="btn btn-success" id="saveEditVppBtn" style="padding: 10px 20px;"><i class="fas fa-save"></i> Lưu Thay Đổi</button>
       </div>
     </div>
   </div>
 
-  <script src="vpp.js"></script>
+  <!-- Hidden file input for Excel import -->
+  <input type="file" id="importExcelFile" accept=".xlsx, .xls, .csv" style="display: none;">
+
+  <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+  <script src="vpp.js?v=7"></script>
 </body>
 </html>
