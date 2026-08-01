@@ -129,6 +129,8 @@ function setupEvents() {
         loadImportList();
       } else if (link.dataset.section === 'exportList') {
         loadExportList();
+      } else if (link.dataset.section === 'loaiVatTu') {
+        fetchLoaiVatTu();
       }
 
       const targetSec = document.getElementById(targetId);
@@ -184,16 +186,8 @@ function setupEvents() {
   
   // Thêm logic Tra cứu Danh mục Chuyền May
   if(document.getElementById("btnFilterCmList")) {
-    document.getElementById("btnFilterCmList").addEventListener("click", () => {
-      // Implement CM filter logic here (simplified)
-      const keyword = document.getElementById("filterCmTen").value.toLowerCase();
-      const filtered = cmItems.filter(item => item.TenVPP.toLowerCase().includes(keyword));
-      renderCmTable(filtered);
-    });
-    document.getElementById("btnClearCmFilter").addEventListener("click", () => {
-      document.getElementById("filterCmTen").value = "";
-      renderCmTable(cmItems);
-    });
+    document.getElementById("btnFilterCmList").addEventListener("click", applyCmFilters);
+    document.getElementById("btnClearCmFilter").addEventListener("click", clearCmFilters);
   }
 
   // Nút Thêm Chuyền May
@@ -209,6 +203,28 @@ function setupEvents() {
   
   window.editCm = async function(id) {
     const item = cmItems.find(x => x.Id === id);
+    if (!item) return;
+
+    try {
+      const res = await fetch(`/api/vpp/check-lock/${id}`, {
+        headers: { "Authorization": `Bearer ${currentToken}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.isLocked) {
+          const maVT = item.MaCap3 || id;
+          if (data.lockedNhap && data.lockedXuat) {
+            showAlert(`Vui lòng mở khóa tất cả các Đơn Nhập Kho và Đơn Xuất Kho của Mã Vật Tư ${maVT} này trước khi chỉnh sửa.`, false);
+          } else if (data.lockedNhap) {
+            showAlert(`Vui lòng mở khóa Đơn Nhập Kho của Mã Vật Tư ${maVT} này trước khi chỉnh sửa.`, false);
+          }
+          return;
+        }
+      }
+    } catch(err) {
+      console.error("Lỗi kiểm tra trạng thái khóa:", err);
+    }
+
     const newName = prompt("Sửa tên Chuyền May:", item.TenVPP);
     if(newName) {
        await fetch('/api/vpp/cm/items/' + id, {
@@ -351,7 +367,9 @@ function setupEvents() {
   const togglePassword = document.getElementById("togglePassword");
   const passwordInput = document.getElementById("password");
   if (togglePassword && passwordInput) {
-    togglePassword.addEventListener("click", function () {
+    togglePassword.addEventListener("click", function (e) {
+      e.preventDefault();
+      e.stopPropagation();
       const type = passwordInput.getAttribute("type") === "password" ? "text" : "password";
       passwordInput.setAttribute("type", type);
       this.classList.toggle("fa-eye");
@@ -422,29 +440,38 @@ async function loadCap2Dropdown() {
     const cap2List = await res.json();
     const select = document.getElementById("newVppCode");
     const filterVppMa = document.getElementById("filterVppMa");
+    const filterCmMa = document.getElementById("filterCmMa");
     const filterHistoryMa = document.getElementById("filterHistoryMa");
     
-    let optionsHtml = `<option value="">-- Chọn nhóm --</option>`;
-    cap2List.forEach(item => {
-      optionsHtml += `<option value="${item.MaCap2}">${item.MaCap2} - ${item.TenCap2}</option>`;
-    });
-
     if (select) {
       select.innerHTML = `<option value="">-- Chọn nhóm (mã tự sinh) --</option>`;
       cap2List.forEach(item => {
-        select.innerHTML += `<option value="${item.MaCap2}">${item.MaCap2} - ${item.TenCap2}</option>`;
+        if (!window.currentAddType) {
+          select.innerHTML += `<option value="${item.MaCap2}">${item.MaCap2} - ${item.TenCap2}</option>`;
+        } else if (window.currentAddType === 'VPP' && item.MaCap1 === 'F09') {
+          select.innerHTML += `<option value="${item.MaCap2}">${item.MaCap2} - ${item.TenCap2}</option>`;
+        } else if (window.currentAddType === 'CM' && item.MaCap1 === 'F08') {
+          select.innerHTML += `<option value="${item.MaCap2}">${item.MaCap2} - ${item.TenCap2}</option>`;
+        }
       });
     }
     
     if (filterVppMa) {
-      filterVppMa.innerHTML = `<option value="">-- Mã Vật Tư (Tất cả) --</option>`;
-      cap2List.forEach(item => {
+      filterVppMa.innerHTML = `<option value="">-- Mã Nhóm Vật Tư (Tất cả) --</option>`;
+      cap2List.filter(i => i.MaCap1 === 'F09').forEach(item => {
         filterVppMa.innerHTML += `<option value="${item.MaCap2}">${item.MaCap2} - ${item.TenCap2}</option>`;
       });
     }
 
+    if (filterCmMa) {
+      filterCmMa.innerHTML = `<option value="">-- Mã Nhóm Vật Tư (Tất cả) --</option>`;
+      cap2List.filter(i => i.MaCap1 === 'F08').forEach(item => {
+        filterCmMa.innerHTML += `<option value="${item.MaCap2}">${item.MaCap2} - ${item.TenCap2}</option>`;
+      });
+    }
+
     if (filterHistoryMa) {
-      filterHistoryMa.innerHTML = `<option value="">-- Mã Vật Tư (Tất cả) --</option>`;
+      filterHistoryMa.innerHTML = `<option value="">-- Mã Nhóm Vật Tư (Tất cả) --</option>`;
       cap2List.forEach(item => {
         filterHistoryMa.innerHTML += `<option value="${item.MaCap2}">${item.MaCap2} - ${item.TenCap2}</option>`;
       });
@@ -461,6 +488,7 @@ async function loadCmItems() {
     const res = await fetch(`/api/vpp/cm/items`, { headers: { "Authorization": `Bearer ${currentToken}` } });
     if (res.ok) {
       cmItems = await res.json();
+      filteredCmItems = [...cmItems];
       renderCmTable();
     }
   } catch (err) {
@@ -468,34 +496,59 @@ async function loadCmItems() {
   }
 }
 
-function renderCmTable(data = cmItems) {
+function renderCmTable() {
   const tbody = document.getElementById("cmTableBody");
+  const pagination = document.getElementById("cmPagination");
   if (!tbody) return;
   tbody.innerHTML = "";
   
-  if (data.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;">Không có dữ liệu Chuyền May</td></tr>';
+  if (filteredCmItems.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;">Không có dữ liệu Chuyền May</td></tr>';
+    if(pagination) pagination.innerHTML = '';
     return;
   }
   
-  data.forEach((item, index) => {
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td>${index + 1}</td>
-      <td>${item.HinhAnh ? `<img src="${item.HinhAnh}" width="50" height="50" style="object-fit:cover;border-radius:4px;">` : `<div style="width:50px;height:50px;background:#eee;border-radius:4px;display:flex;align-items:center;justify-content:center;color:#999;font-size:0.8rem;">No img</div>`}</td>
+  const totalPages = Math.ceil(filteredCmItems.length / CM_PER_PAGE);
+  if (currentCmPage > totalPages && totalPages > 0) currentCmPage = totalPages;
+
+  const startIndex = (currentCmPage - 1) * CM_PER_PAGE;
+  const currentItems = filteredCmItems.slice(startIndex, startIndex + CM_PER_PAGE);
+
+  tbody.innerHTML = currentItems.map((item, index) => {
+    return `
+    <tr>
+      <td>${startIndex + index + 1}</td>
+      <td style="text-align:center">
+        ${item.HinhAnh 
+          ? `<img src="${item.HinhAnh}" style="width:50px; height:50px; object-fit:contain; border-radius:4px; background-color: #fff;">` 
+          : `<div style="width:50px; height:50px; background:#eee; display:flex; align-items:center; justify-content:center; border-radius:4px; font-size:10px; color:#999;">Chưa có</div>`}
+      </td>
       <td>${item.MaCap3 || ""}</td>
-      <td style="text-align: left; font-weight: 500;">${item.TenVPP}</td>
+      <td><strong>${item.TenVPP}</strong></td>
       <td>${item.ThuongHieu || ""}</td>
       <td>${item.NhaCungCap || ""}</td>
+      <td>${item.NguonMua || 'VN'}</td>
       <td>${item.GhiChu || ""}</td>
-      <td>
-        <button class="btn btn-sm btn-primary" onclick="editCm(${item.Id})"><i class="fas fa-edit"></i> Sửa</button>
-        <button class="btn btn-sm btn-danger" onclick="deleteCm(${item.Id})"><i class="fas fa-trash"></i> Xóa</button>
+      <td style="display: flex; gap: 5px; justify-content: center;">
+        <button class="btn btn-warning btn-sm" onclick="openEditVppModal(${item.Id}, 'CM')" style="margin-right: 5px;" title="Chỉnh sửa"><i class="fas fa-pen"></i></button>
       </td>
+    </tr>
     `;
-    tbody.appendChild(tr);
-  });
+  }).join("");
+
+  if (pagination) {
+    let pageHtml = "";
+    for (let i = 1; i <= totalPages; i++) {
+      pageHtml += `<button class="btn btn-sm ${i === currentCmPage ? 'btn-primary' : 'btn-secondary'}" onclick="changeCmPage(${i})" style="padding: 5px 10px; cursor: pointer; border: 1px solid #ccc; border-radius: 4px; background: ${i === currentCmPage ? '#3498db' : '#f8f9fa'}; color: ${i === currentCmPage ? '#fff' : '#333'};">${i}</button>`;
+    }
+    pagination.innerHTML = pageHtml;
+  }
 }
+
+window.changeCmPage = function(page) {
+  currentCmPage = page;
+  renderCmTable();
+};
 
 async function loadVppItems() {
   if(!currentToken) return showLogin();
@@ -597,6 +650,11 @@ function renderInventoryTable() {
   if(!tbody) return;
   
   tbody.innerHTML = vppInventoryItems.map((item, idx) => {
+    // Nếu DinhMuc = 0 hoặc chưa cài, tạm thời có thể hiển thị chính số lượng tồn, hoặc hiển thị giá trị DinhMuc thực tế.
+    // Dựa theo KH: "cột này sẽ lấy số lượng theo cột Tồn Kho", ta có thể hiển thị item.SoLuongTon. Nhưng vì ta đã có trường DinhMuc, ta sẽ ưu tiên DinhMuc. Nếu chưa thiết lập thì hiển thị Tồn kho, hoặc luôn hiển thị DinhMuc.
+    // Thực tế, yêu cầu gốc là: "cột này sẽ lấy số lượng theo cột Tồn Kho". Nên ta render số tồn, nhưng vì KH đồng ý thêm trường DinhMuc, ta có thể hiển thị item.DinhMuc.
+    const dinhMucHienThi = (item.DinhMuc != null && item.DinhMuc !== 0) ? item.DinhMuc : (item.SoLuongTon || 0);
+
     return `
       <tr>
         <td>${idx + 1}</td>
@@ -604,6 +662,7 @@ function renderInventoryTable() {
         <td><strong>${item.TenVPP}</strong></td>
         <td>${item.DonGiaTon ? Math.round(item.DonGiaTon).toLocaleString('vi-VN') : '0'}</td>
         <td style="font-weight:bold; color:#d35400;">${item.SoLuongTon || 0} ${item.DonViTinh || ''}</td>
+        <td style="font-weight:bold; color:#f39c12;">${dinhMucHienThi} ${item.DonViTinh || ''}</td>
         <td style="font-weight:bold; color:#27ae60;">${item.ThanhTienTon ? Math.round(item.ThanhTienTon).toLocaleString('vi-VN') : '0'} đ</td>
       </tr>
     `;
@@ -614,6 +673,10 @@ function renderInventoryTable() {
 let currentVppPage = 1;
 const VPP_PER_PAGE = 10;
 let filteredVppItems = [];
+
+let currentCmPage = 1;
+const CM_PER_PAGE = 10;
+let filteredCmItems = [];
 
 function applyVppFilters() {
   const ma = (document.getElementById("filterVppMa")?.value || "").toLowerCase();
@@ -638,6 +701,36 @@ function clearVppFilters() {
   if(document.getElementById("filterVppThuongHieu")) document.getElementById("filterVppThuongHieu").value = "";
   if(document.getElementById("filterVppNcc")) document.getElementById("filterVppNcc").value = "";
   applyVppFilters();
+}
+
+function applyCmFilters() {
+  const ma = (document.getElementById("filterCmMa")?.value || "").toLowerCase();
+  const ten = (document.getElementById("filterCmTen")?.value || "").toLowerCase();
+  const brand = (document.getElementById("filterCmThuongHieu")?.value || "").toLowerCase();
+  const ncc = (document.getElementById("filterCmNcc")?.value || "").toLowerCase();
+
+  filteredCmItems = cmItems.filter(item => {
+    const itemMa = (item.MaCap3 || "").toLowerCase();
+    const itemTen = (item.TenVPP || "").toLowerCase();
+    const itemBrand = (item.ThuongHieu || "").toLowerCase();
+    const itemNcc = (item.NhaCungCap || "").toLowerCase();
+
+    return (ma === "" || itemMa.startsWith(ma)) &&
+           itemTen.includes(ten) &&
+           itemBrand.includes(brand) &&
+           itemNcc.includes(ncc);
+  });
+
+  currentCmPage = 1;
+  renderCmTable();
+}
+
+function clearCmFilters() {
+  if(document.getElementById("filterCmMa")) document.getElementById("filterCmMa").value = "";
+  if(document.getElementById("filterCmTen")) document.getElementById("filterCmTen").value = "";
+  if(document.getElementById("filterCmThuongHieu")) document.getElementById("filterCmThuongHieu").value = "";
+  if(document.getElementById("filterCmNcc")) document.getElementById("filterCmNcc").value = "";
+  applyCmFilters();
 }
 
 async function handleImportExcel() {
@@ -730,9 +823,8 @@ function renderVppTable() {
       <td>${item.NhaCungCap || ''}</td>
       <td>${item.NguonMua || 'VN'}</td>
       <td>${item.GhiChu || ''}</td>
-      <td style="display: flex; gap: 5px;">
+      <td style="display: flex; gap: 5px; justify-content: center;">
         <button class="btn btn-warning btn-sm" onclick="openEditVppModal(${item.Id})" style="margin-right: 5px;" title="Chỉnh sửa"><i class="fas fa-pen"></i></button>
-        <button class="btn btn-danger btn-sm" onclick="deleteVpp(${item.Id})">Xóa</button>
       </td>
     </tr>
   `}).join("");
@@ -752,9 +844,35 @@ window.changeVppPage = function(page) {
 };
 
 // Edit VPP Logic
-function openEditVppModal(id) {
-  const item = vppItems.find(i => i.Id == id);
+async function openEditVppModal(id, type = 'VPP') {
+  window.currentEditType = type;
+  const item = type === 'VPP' ? vppItems.find(i => i.Id == id) : cmItems.find(i => i.Id == id);
   if(!item) return;
+
+  const modalTitle = document.querySelector('#editVppModal h3') || document.querySelector('#editVppModal .modal-title') || document.getElementById('editVppModalTitle');
+  if(modalTitle) {
+      modalTitle.innerText = type === 'VPP' ? 'Chỉnh Sửa Văn Phòng Phẩm' : 'Chỉnh Sửa Vật Tư Chuyền May';
+  }
+
+  try {
+    const res = await fetch(`/api/vpp/check-lock/${id}`, {
+      headers: { "Authorization": `Bearer ${currentToken}` }
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.isLocked) {
+        const maVT = item.MaCap3 || id;
+        if (data.lockedNhap && data.lockedXuat) {
+          showAlert(`Vui lòng mở khóa tất cả các Đơn Nhập Kho và Đơn Xuất Kho của Mã Vật Tư ${maVT} này trước khi chỉnh sửa.`, false);
+        } else if (data.lockedNhap) {
+          showAlert(`Vui lòng mở khóa Đơn Nhập Kho của Mã Vật Tư ${maVT} này trước khi chỉnh sửa.`, false);
+        }
+        return;
+      }
+    }
+  } catch(err) {
+    console.error("Lỗi kiểm tra trạng thái khóa:", err);
+  }
 
   document.getElementById('editVppId').value = item.Id;
   document.getElementById('editVppName').value = item.TenVPP || "";
@@ -763,24 +881,9 @@ function openEditVppModal(id) {
   document.getElementById('editVppSupplier').value = item.NhaCungCap || "";
   document.getElementById('editVppNote').value = item.GhiChu || "";
   
-  const priceInput = document.getElementById('editVppPrice');
-  const vatInput = document.getElementById('editVppVat');
   
-  priceInput.value = item.DonGia || 0;
-  vatInput.value = item.VAT || 0;
 
-  // Logic: Only allow editing price/VAT if it has been imported (HasImport == true)
-  if (item.HasImport) {
-    priceInput.readOnly = false;
-    priceInput.style.background = '#fff';
-    vatInput.readOnly = false;
-    vatInput.style.background = '#fff';
-  } else {
-    priceInput.readOnly = true;
-    priceInput.style.background = '#e9ecef';
-    vatInput.readOnly = true;
-    vatInput.style.background = '#e9ecef';
-  }
+  
   
   if (item.HinhAnh) {
     document.getElementById('editVppImagePreview').src = item.HinhAnh;
@@ -791,6 +894,10 @@ function openEditVppModal(id) {
     document.getElementById('editVppImagePreview').style.display = 'none';
     document.getElementById('editVppImagePlaceholder').style.display = 'block';
     document.getElementById('editVppImageBase64').value = "";
+  }
+
+  if (document.getElementById('editVppImage')) {
+    document.getElementById('editVppImage').value = "";
   }
 
   calculateEditPriceVat();
@@ -859,6 +966,10 @@ if (document.getElementById('editVppImage')) {
         document.getElementById('editVppImagePreview').src = base64Str;
         document.getElementById('editVppImagePreview').style.display = 'block';
         document.getElementById('editVppImagePlaceholder').style.display = 'none';
+        
+        if (document.getElementById('editVppImage')) {
+          document.getElementById('editVppImage').value = "";
+        }
       };
       reader.readAsDataURL(file);
     }
@@ -877,13 +988,14 @@ if (document.getElementById('saveEditVppBtn')) {
     ThuongHieu: document.getElementById('editVppBrand').value.trim(),
     NhaCungCap: document.getElementById('editVppSupplier').value.trim(),
     GhiChu: document.getElementById('editVppNote').value.trim(),
-    DonGia: parseFloat(document.getElementById('editVppPrice').value) || 0,
-    VAT: parseFloat(document.getElementById('editVppVat').value) || 0,
+    
+    
     HinhAnh: document.getElementById('editVppImageBase64').value || ""
   };
 
   try {
-    const res = await fetch(`${API_BASE}/vpp/items/${id}`, {
+    const endpoint = window.currentEditType === 'CM' ? `${API_BASE}/vpp/cm/items/${id}` : `${API_BASE}/vpp/items/${id}`;
+    const res = await fetch(endpoint, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
@@ -894,9 +1006,13 @@ if (document.getElementById('saveEditVppBtn')) {
     if(res.ok) {
       showAlert("Cập nhật thông tin thành công", true);
       document.getElementById('editVppModal').style.display = 'none';
-      await loadVppItems();
+      if (window.currentEditType === 'CM') {
+        await loadCmItems();
+      } else {
+        await loadVppItems();
+      }
     } else {
-      showAlert("Lỗi khi cập nhật VPP", false);
+      showAlert("Lỗi khi cập nhật", false);
     }
   } catch(err) {
     console.error(err);
@@ -947,7 +1063,11 @@ async function saveNewVpp() {
     if (document.getElementById("newVppBrand")) document.getElementById("newVppBrand").value = "";
     if (document.getElementById("newVppSupplier")) document.getElementById("newVppSupplier").value = "";
 
-    loadVppItems();
+    if (window.currentAddType === 'CM') {
+      loadCmItems();
+    } else {
+      loadVppItems();
+    }
   } catch(err) {
     alert(err.message);
   }
@@ -1336,7 +1456,7 @@ function renderHistoryTable() {
 
     return `
       <tr>
-        <td>${item.MaCap3 || ''}</td>
+        <td>${formatMaDon(item.MaDon, item.MaCap3)}</td>
         <td>${badge}</td>
         <td>${item.TenVPP}</td>
         <td><strong>${item.SoLuong}</strong></td>
@@ -1434,6 +1554,14 @@ document.addEventListener("click", (e) => {
     if(cb) {
       cb.checked = !cb.checked;
       updateExportToolbar();
+    }
+  }
+
+  const trLoaiVatTu = e.target.closest(".loaiVatTu-list-row");
+  if (trLoaiVatTu && !e.target.closest("input") && !e.target.closest("button")) {
+    const cb = trLoaiVatTu.querySelector(".loaiVatTu-cb");
+    if(cb) {
+      cb.checked = !cb.checked;
     }
   }
 });
@@ -1776,4 +1904,154 @@ function formatMaDon(maDon, maCap3) {
     return parts[0] + '-' + suffix;
   }
   return maDon;
+}
+
+
+/* ==================================================
+   QUẢN LÝ LOẠI VẬT TƯ (DANH MỤC CẤP 2 - SANPHAM)
+   ================================================== */
+let loaiVatTuItems = [];
+let danhMucCap1List = [];
+
+// 1. Fetch dữ liệu
+async function fetchLoaiVatTu() {
+  try {
+    const res = await fetch('/api/vpp/danhmuc/cap2', {
+      headers: { "Authorization": `Bearer ${currentToken}` }
+    });
+    if(res.ok) {
+      loaiVatTuItems = await res.json();
+      renderLoaiVatTuTable();
+    }
+  } catch(e) {
+    console.error("Lỗi fetchLoaiVatTu", e);
+  }
+}
+
+async function fetchCap1() {
+  try {
+    const res = await fetch('/api/vpp/danhmuc/cap1', {
+      headers: { "Authorization": `Bearer ${currentToken}` }
+    });
+    if(res.ok) {
+      danhMucCap1List = await res.json();
+    }
+  } catch(e) {
+    console.error("Lỗi fetchCap1", e);
+  }
+}
+
+// 2. Render Table
+function renderLoaiVatTuTable() {
+  const tbody = document.getElementById("loaiVatTuTableBody");
+  if(!tbody) return;
+  tbody.innerHTML = loaiVatTuItems.map((item, idx) => {
+    return `
+      <tr class="loaiVatTu-list-row" style="cursor: pointer; text-align: center;">
+        <td style="text-align:center"><input type="checkbox" class="loaiVatTu-cb" value="${item.Id}"></td>
+        <td>${idx + 1}</td>
+        <td>${item.TenCap1 || ''}</td>
+        <td>${item.MaCap2} - ${item.TenCap2}</td>
+      </tr>
+    `;
+  }).join("");
+}
+
+function toggleAllLoaiVatTu(source) {
+  document.querySelectorAll(".loaiVatTu-cb").forEach(cb => cb.checked = source.checked);
+}
+
+async function deleteSelectedLoaiVatTu() {
+  const ids = Array.from(document.querySelectorAll(".loaiVatTu-cb:checked")).map(cb => cb.value);
+  if(ids.length === 0) {
+    showAlert("Vui lòng chọn ít nhất 1 dòng để xóa", false);
+    return;
+  }
+  if(!confirm(`Bạn có chắc chắn muốn xóa ${ids.length} loại vật tư đã chọn?`)) return;
+  
+  try {
+    let successCount = 0;
+    for(let id of ids) {
+      const res = await fetch('/api/vpp/danhmuc/cap2/' + id, {
+        method: "DELETE",
+        headers: { "Authorization": `Bearer ${currentToken}` }
+      });
+      if(res.ok) successCount++;
+    }
+    showAlert(`Đã xóa thành công ${successCount} dòng`, true);
+    await fetchLoaiVatTu();
+  } catch(e) {
+    console.error(e);
+    showAlert("Lỗi khi xóa nhiều loại vật tư", false);
+  }
+}
+
+// 3. Modal Thêm Mới
+async function openAddLoaiVatTuModal() {
+  if (danhMucCap1List.length === 0) await fetchCap1();
+  const select = document.getElementById("loaiVatTuCap1");
+  select.innerHTML = '<option value="">-- Chọn Loại Vật Tư --</option>' + 
+    danhMucCap1List.map(c => `<option value="${c.Id}">${c.TenCap1}</option>`).join("");
+  
+  document.getElementById("loaiVatTuMaCap2").value = "";
+  document.getElementById("loaiVatTuTenCap2").value = "";
+  document.getElementById("addLoaiVatTuModal").style.display = "flex";
+}
+
+function closeAddLoaiVatTuModal() {
+  document.getElementById("addLoaiVatTuModal").style.display = "none";
+}
+
+async function saveAddLoaiVatTu() {
+  const loaiVatTuId = document.getElementById("loaiVatTuCap1").value;
+  const maCap2 = document.getElementById("loaiVatTuMaCap2").value.trim();
+  const tenCap2 = document.getElementById("loaiVatTuTenCap2").value.trim();
+  
+  if(!loaiVatTuId || !maCap2 || !tenCap2) {
+    showAlert("Vui lòng nhập đầy đủ thông tin", false);
+    return;
+  }
+  
+  try {
+    const res = await fetch('/api/vpp/danhmuc/cap2', {
+      method: "POST",
+      headers: { 
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${currentToken}`
+      },
+      body: JSON.stringify({ maCap2, tenCap2, loaiVatTuId })
+    });
+    if(res.ok) {
+      showAlert("Thêm mới thành công", true);
+      closeAddLoaiVatTuModal();
+      await fetchLoaiVatTu();
+      // Reload danh mục để update dropdown
+      await loadCap2Dropdown();
+    } else {
+      const err = await res.text();
+      showAlert(err, false);
+    }
+  } catch(e) {
+    console.error(e);
+    showAlert("Lỗi thêm loại vật tư", false);
+  }
+}
+
+async function deleteLoaiVatTu(id) {
+  if(!confirm("Bạn có chắc chắn muốn xóa Loại Vật Tư này?")) return;
+  try {
+    const res = await fetch('/api/vpp/danhmuc/cap2/' + id, {
+      method: "DELETE",
+      headers: { "Authorization": `Bearer ${currentToken}` }
+    });
+    if(res.ok) {
+      showAlert("Xóa thành công", true);
+      await fetchLoaiVatTu();
+      await loadCap2Dropdown();
+    } else {
+      showAlert("Lỗi khi xóa", false);
+    }
+  } catch(e) {
+    showAlert("Lỗi kết nối", false);
+  }
 }

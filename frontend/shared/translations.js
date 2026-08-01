@@ -372,8 +372,8 @@ const translations = {
     // Layout & UI
     clearFilter: "Xóa bộ lọc",
     restore: "Làm mới",
-    fixedAssets: "Tài sản cố định",
-    officeSupplies: "Văn phòng phẩm",
+    fixedAssets: "Tài Sản Cố Định",
+    officeSupplies: "Quản Lý Vật Tư",
 
     // Device Modal - missing labels
     locationLabel: "Vị trí",

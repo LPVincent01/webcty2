@@ -1,0 +1,1 @@
+const sql = require('mssql'); const config = require('./dbConfig'); (async () => { try { const pool = await sql.connect(config); const res = await pool.request().query('SELECT OBJECT_DEFINITION(OBJECT_ID(''V_VATTU'')) AS ViewDef'); console.log(res.recordset); process.exit(0); } catch(e) { console.error(e); process.exit(1); } })();

@@ -165,7 +165,8 @@ body {
   right: 1rem;
   cursor: pointer;
   color: var(--text-light);
-  /* Không cần top/transform vì đã có flex align-items */
+  z-index: 10;
+  pointer-events: auto;
 }
 
 /* Date placeholder styling */

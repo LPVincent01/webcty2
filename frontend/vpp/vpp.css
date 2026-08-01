@@ -81,3 +81,7 @@
 #btnImportListEdit, #btnExportListEdit { background-color: #ffc107; color: #212529; }
 #btnImportListDelete, #btnExportListDelete { background-color: #dc3545; }
 
+
+
+#editVppImage { color: transparent; }
+#editVppImage::file-selector-button { color: #333; }

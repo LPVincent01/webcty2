@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Quản Lý Vật Tư</title>
+  <title>Quản Lý Kho Vật Tư</title>
 
   <!-- Icons & Chart -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
@@ -20,8 +20,8 @@
   <div class="login-container" id="loginPage">
     <!-- App Switcher Top Right -->
     <div style="position: absolute; top: 20px; right: 20px; z-index: 1000; display: flex; gap: 10px; background: rgba(255,255,255,0.2); padding: 5px; border-radius: 8px; backdrop-filter: blur(10px);">
-      <a href="/taisan/" style="padding: 8px 15px; border-radius: 6px; text-decoration: none; font-weight: bold; background: transparent; color: #333; border: 1px solid rgba(0,0,0,0.1);">Tài sản cố định</a>
-      <a href="/vpp/" style="padding: 8px 15px; border-radius: 6px; text-decoration: none; font-weight: bold; background: #3498db; color: white; border: 1px solid #3498db;">Văn phòng phẩm</a>
+      <a href="/taisan/" style="padding: 8px 15px; border-radius: 6px; text-decoration: none; font-weight: bold; background: transparent; color: #333; border: 1px solid rgba(0,0,0,0.1);">Tài Sản Cố Định</a>
+      <a href="/vpp/" style="padding: 8px 15px; border-radius: 6px; text-decoration: none; font-weight: bold; background: #3498db; color: white; border: 1px solid #3498db;">Quản Lý Vật Tư</a>
     </div>
 
     <div class="login-logo">
@@ -48,7 +48,7 @@
   <div class="app-container" id="appContainer" style="display: none">
     <header class="header">
       <div style="width: 150px;"></div> <!-- Spacer để cân bằng với user-menu -->
-      <h1 style="text-align: center; flex: 1;">Quản Lý Vật Tư</h1>
+      <h1 style="text-align: center; flex: 1;">Quản Lý Kho Vật Tư</h1>
       <div class="user-menu" style="min-width: 150px; justify-content: flex-end;">
         <img id="userAvatar" src="https://ui-avatars.com/api/?name=User&background=3498db&color=fff" alt="User Avatar" />
         <span id="currentUserText" class="current-user-text">Chưa đăng nhập</span>
@@ -74,9 +74,15 @@
             </div>
             <ul class="submenu" id="submenuThongTinVatTu" style="list-style: none; padding-left: 10px; margin: 5px 0 0 0; display: block;">
               <li>
+                <a href="#" data-section="loaiVatTu">
+                  <i class="fa-solid fa-layer-group" style="color: #9b59b6;"></i>
+                  <span>Loại Vật Tư</span>
+                </a>
+              </li>
+              <li>
                 <a href="#" class="active" data-section="list">
                   <i class="fa-solid fa-paperclip" style="color: #3498db;"></i>
-                  <span>Danh mục Văn phòng phẩm</span>
+                  <span>Danh mục Quản Lý Vật Tư</span>
                 </a>
               </li>
               <li>
@@ -149,6 +155,39 @@
       </aside>
 
       <main class="content-area">
+        <!-- Section: Loại Vật Tư -->
+        <section class="content-section" id="vpp-loaiVatTuSection" style="display: none;">
+          <div class="table-header" style="display: flex; flex-wrap: nowrap; justify-content: space-between; align-items: stretch; padding-bottom: 1rem; border-bottom: 1px solid #eee; margin-bottom: 15px; gap: 20px;">
+            <div class="header-left" style="flex: 1; min-width: 0;">
+              <h2 style="font-size: 1.4rem; color: #333; margin: 0 0 10px 0; font-weight: 600;">Danh Sách Loại Vật Tư</h2>
+              <p class="section-description" style="margin:0;">Quản lý danh sách các nhóm cấp 2 (VPP, CM)</p>
+            </div>
+            <div class="header-right" style="display: flex; gap: 10px; align-items: flex-start; flex-shrink: 0; flex-direction: column;">
+              <button class="btn-primary" onclick="openAddLoaiVatTuModal()" style="height: 36px; padding: 0 15px; border-radius: 8px; border: none; background: #3498db; color: white; cursor: pointer; display: flex; align-items: center; gap: 5px; width: 100%;">
+                <i class="fa-solid fa-plus"></i> Thêm mới
+              </button>
+              <button class="btn-danger" onclick="deleteSelectedLoaiVatTu()" style="height: 36px; padding: 0 15px; border-radius: 8px; border: none; background: #c0392b; color: white; cursor: pointer; display: flex; align-items: center; gap: 5px; width: 100%;">
+                <i class="fa-solid fa-trash"></i> Xóa
+              </button>
+            </div>
+          </div>
+          <div class="table-container">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th style="width: 50px;"><input type="checkbox" id="checkAllLoaiVatTu" onchange="toggleAllLoaiVatTu(this)"></th>
+                  <th style="width: 50px;">STT</th>
+                  <th style="width: 200px;">Loại Vật Tư</th>
+                  <th style="width: 300px;">Mã nhóm vật tư</th>
+                </tr>
+              </thead>
+              <tbody id="loaiVatTuTableBody">
+                <!-- Nội dung render -->
+              </tbody>
+            </table>
+          </div>
+        </section>
+
         <!-- Section: Danh mục VPP -->
         <section class="content-section" id="vpp-listSection">
           <div class="table-header" style="display: flex; flex-wrap: nowrap; justify-content: space-between; align-items: stretch; padding-bottom: 1rem; border-bottom: 1px solid #eee; margin-bottom: 15px; gap: 20px;">
@@ -157,7 +196,7 @@
               <p class="section-description" style="margin:0;">Quản lý danh sách các vật tư, số lượng tồn kho</p>
               <div class="table-filters" style="display: flex; align-items: center; flex-wrap: wrap; gap: 8px;">
                 <select id="filterVppMa" style="padding: 0 10px; border-radius: 8px; height: 36px; border: 1px solid #ddd; outline: none; font-size: 0.9rem; min-width: 150px;">
-                  <option value="">-- Mã Vật Tư (Tất cả) --</option>
+                  <option value="">-- Mã Nhóm Vật Tư (Tất cả) --</option>
                 </select>
                 <input type="text" id="filterVppTen" placeholder="Tên Vật Tư" style="padding: 0 10px; border-radius: 8px; height: 36px; border: 1px solid #ddd; outline: none; font-size: 0.9rem; min-width: 200px;" />
                 <input type="text" id="filterVppThuongHieu" placeholder="Thương Hiệu / Hãng" style="padding: 0 10px; border-radius: 8px; height: 36px; border: 1px solid #ddd; outline: none; font-size: 0.9rem;" />
@@ -210,7 +249,7 @@
               <p class="section-description" style="margin:0;">Quản lý danh sách các vật tư, số lượng tồn kho</p>
               <div class="table-filters" style="display: flex; align-items: center; flex-wrap: wrap; gap: 8px;">
                 <select id="filterCmMa" style="padding: 0 10px; border-radius: 8px; height: 36px; border: 1px solid #ddd; outline: none; font-size: 0.9rem; min-width: 150px;">
-                  <option value="">-- Mã Vật Tư (Tất cả) --</option>
+                  <option value="">-- Mã Nhóm Vật Tư (Tất cả) --</option>
                 </select>
                 <input type="text" id="filterCmTen" placeholder="Tên Vật Tư" style="padding: 0 10px; border-radius: 8px; height: 36px; border: 1px solid #ddd; outline: none; font-size: 0.9rem; min-width: 200px;" />
                 <input type="text" id="filterCmThuongHieu" placeholder="Thương Hiệu / Hãng" style="padding: 0 10px; border-radius: 8px; height: 36px; border: 1px solid #ddd; outline: none; font-size: 0.9rem;" />
@@ -271,6 +310,7 @@
                   <th style="width: 250px;">TÊN VẬT TƯ</th>
                   <th style="width: 150px;">ĐƠN GIÁ (TỒN)</th>
                   <th style="width: 100px;">TỒN KHO</th>
+                  <th style="width: 100px;">ĐỊNH MỨC VẬT TƯ</th>
                   <th style="width: 150px;">THÀNH TIỀN TỒN</th>
                 </tr>
               </thead>
@@ -285,7 +325,7 @@
         <section class="content-section" id="vpp-importSection" style="display: none;">
           <div class="table-header" style="display: flex; flex-wrap: nowrap; justify-content: space-between; align-items: stretch; padding-bottom: 1rem; border-bottom: 1px solid #eee; margin-bottom: 15px; gap: 20px;">
             <div style="display: flex; flex-direction: column; gap: 12px; flex: 1 1 auto; min-width: 0;">
-              <h3 style="margin: 0; display: flex; align-items: center; gap: 8px;"><span class="table-title">Nhập Kho Văn Phòng Phẩm</span></h3>
+              <h3 style="margin: 0; display: flex; align-items: center; gap: 8px;"><span class="table-title">Nhập Kho Vật Tư</span></h3>
               <p class="section-description" style="margin:0;">Thông tin nhập kho</p>
             </div>
             <div class="table-actions" style="display: flex; gap: 5px; flex-wrap: wrap; justify-content: flex-end; align-items: flex-end; padding-left: 20px; border-left: 1px solid #e2e8f0; flex: 0 0 auto; max-width: 450px;">
@@ -297,7 +337,7 @@
               <thead>
                 <tr>
                   <th style="width: 50px;">STT</th>
-                  <th style="width: 120px;">MÃ VPP</th>
+                  <th style="width: 120px;">MÃ VẬT TƯ</th>
                   <th style="width: 250px;">TÊN VẬT TƯ</th>
                   <th style="width: 80px;">ĐVT</th>
                   <th style="width: 80px;">SL</th>
@@ -321,7 +361,7 @@
         <section class="content-section" id="vpp-exportSection" style="display: none;">
           <div class="table-header" style="display: flex; flex-wrap: nowrap; justify-content: space-between; align-items: stretch; padding-bottom: 1rem; border-bottom: 1px solid #eee; margin-bottom: 15px; gap: 20px;">
             <div style="display: flex; flex-direction: column; gap: 12px; flex: 1 1 auto; min-width: 0;">
-              <h3 style="margin: 0; display: flex; align-items: center; gap: 8px;"><span class="table-title">Xuất Kho Văn Phòng Phẩm</span></h3>
+              <h3 style="margin: 0; display: flex; align-items: center; gap: 8px;"><span class="table-title">Xuất Kho Vật Tư</span></h3>
               <p class="section-description" style="margin:0;">Cấp phát vật tư cho nhân viên/phòng ban</p>
             </div>
             <div class="table-actions" style="display: flex; gap: 5px; flex-wrap: wrap; justify-content: flex-end; align-items: flex-end; padding-left: 20px; border-left: 1px solid #e2e8f0; flex: 0 0 auto; max-width: 450px;">
@@ -333,7 +373,7 @@
               <thead>
                 <tr>
                   <th style="width: 50px;">STT</th>
-                  <th style="width: 120px;">MÃ VPP</th>
+                  <th style="width: 120px;">MÃ VẬT TƯ</th>
                   <th style="width: 200px;">TÊN VẬT TƯ</th>
                   <th style="width: 60px;">ĐVT</th>
                   <th style="width: 80px;">TỒN KHO</th>
@@ -490,7 +530,7 @@
               <p class="section-description" style="margin:0;">Xem lại các lần nhập/xuất kho</p>
               <div class="table-filters" style="display: flex; align-items: center; flex-wrap: wrap; gap: 8px;">
                 <select id="filterHistoryMa" style="padding: 0 10px; border-radius: 8px; height: 36px; border: 1px solid #ddd; outline: none; font-size: 0.9rem; min-width: 150px;">
-                  <option value="">-- Mã Vật Tư (Tất cả) --</option>
+                  <option value="">-- Mã Nhóm Vật Tư (Tất cả) --</option>
                 </select>
                 <select id="filterHistoryTrangThai" style="border-radius: 8px; border: 1px solid #ddd; padding: 0 10px; height: 36px; outline: none; font-size: 0.9rem;">
                   <option value="">-- Chọn Trạng thái --</option>
@@ -509,7 +549,7 @@
             <table class="data-table">
               <thead>
                 <tr>
-                  <th>Mã Vật Tư</th>
+                  <th>MÃ ĐƠN</th>
                   <th>Trạng thái</th>
                   <th>Tên Vật Tư</th>
                   <th>Số Lượng</th>
@@ -545,11 +585,10 @@
         <!-- Cột 1 -->
         <div>
           <div class="form-group" style="margin-bottom: 15px;">
-            <label style="font-weight: 600; color: #444; margin-bottom: 5px; display: block;">Nhóm sản phẩm</label>
-            <select id="newVppCode" class="form-control" style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px;">
-              <option value="">-- Chọn nhóm (mã tự sinh) --</option>
+              <label style="font-weight: 600; color: #444; margin-bottom: 5px; display: block;">Mã Nhóm Vật Tư</label>
+              <select id="newVppCode" class="form-control" style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px;">
+                <option value="">-- Chọn nhóm vật tư --</option>
             </select>
-            <small style="color: #888; font-size: 0.8rem;">Mã Cấp 3 sẽ được tự động sinh khi chọn nhóm</small>
           </div>
           <div class="form-group" style="margin-bottom: 15px;">
             <label style="font-weight: 600; color: #444; margin-bottom: 5px; display: block;">Tên Vật Tư <span style="color:#e74c3c">*</span></label>
@@ -618,20 +657,7 @@
             <label style="font-weight: 600; color: #444; margin-bottom: 5px; display: block;">Đơn Vị Tính</label>
             <input type="text" id="editVppUnit" class="form-control" style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px;">
           </div>
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
-            <div class="form-group" style="margin-bottom: 15px;">
-              <label style="font-weight: 600; color: #444; margin-bottom: 5px; display: block;">Đơn Giá (VNĐ)</label>
-              <input type="number" id="editVppPrice" class="form-control" style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px;">
-            </div>
-            <div class="form-group" style="margin-bottom: 15px;">
-              <label style="font-weight: 600; color: #444; margin-bottom: 5px; display: block;">VAT (%)</label>
-              <input type="number" id="editVppVat" class="form-control" style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px;">
-            </div>
-          </div>
-          <div class="form-group" style="margin-bottom: 15px;">
-            <label style="font-weight: 600; color: #444; margin-bottom: 5px; display: block;">Đơn Giá sau VAT</label>
-            <input type="number" id="editVppPriceVat" class="form-control" readonly style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; background-color: #e9ecef;">
-          </div>
+          
           <div class="form-group" style="margin-bottom: 15px;">
             <label style="font-weight: 600; color: #444; margin-bottom: 5px; display: block;">Thương hiệu / Hãng</label>
             <input type="text" id="editVppBrand" class="form-control" style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px;">
@@ -656,7 +682,39 @@
   <!-- Hidden file input for Excel import -->
   <input type="file" id="importExcelFile" accept=".xlsx, .xls, .csv" style="display: none;">
 
+  <!-- Modal: Thêm Loại Vật Tư -->
+  <div id="addLoaiVatTuModal" class="modal">
+    <div class="modal-content" style="max-width: 500px;">
+      <div class="modal-header">
+        <h2>Thêm Loại Vật Tư Mới</h2>
+        <span class="close-btn" onclick="closeAddLoaiVatTuModal()">&times;</span>
+      </div>
+      <div class="modal-body" style="padding: 20px;">
+        <div class="form-group" style="margin-bottom: 15px;">
+          <label style="font-weight: 600; color: #444; margin-bottom: 5px; display: block;">Phân Loại Vật Tư</label>
+          <select id="loaiVatTuCap1" class="form-control" style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px;">
+            <option value="">-- Chọn Loại Vật Tư --</option>
+            <!-- Sẽ được fill bằng JS (VPP, CM) -->
+          </select>
+        </div>
+        <div class="form-group" style="margin-bottom: 15px;">
+          <label style="font-weight: 600; color: #444; margin-bottom: 5px; display: block;">Mã nhóm vật tư</label>
+          <input type="text" id="loaiVatTuMaCap2" class="form-control" style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px;" placeholder="VD: F0901">
+        </div>
+        <div class="form-group" style="margin-bottom: 15px;">
+          <label style="font-weight: 600; color: #444; margin-bottom: 5px; display: block;">Tên nhóm vật tư</label>
+          <input type="text" id="loaiVatTuTenCap2" class="form-control" style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px;" placeholder="VD: Kim bấm">
+        </div>
+        <div style="display: flex; gap: 10px; margin-top: 20px;">
+          <button class="btn-secondary" onclick="closeAddLoaiVatTuModal()" style="flex: 1; padding: 10px; border-radius: 6px; background: #eee; border: none; cursor: pointer;">Hủy</button>
+          <button class="btn-primary" onclick="saveAddLoaiVatTu()" style="flex: 1; padding: 10px; border-radius: 6px; background: #3498db; color: white; border: none; cursor: pointer;">Lưu lại</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
-  <script src="vpp.js?v=7"></script>
+  <script src="/shared/translations.js?v=3"></script>
+  <script src="./vpp.js?v=7"></script>
 </body>
 </html>
